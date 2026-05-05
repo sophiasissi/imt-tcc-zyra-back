@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProvedorAutenticacao {
+  EMAIL
+  TELEFONE
+  GOOGLE
+}
+
+enum Genero {
+  MASCULINO
+  FEMININO
+  NAO_BINARIO
+  PREFIRO_NAO_DIZER
+  OUTRO
+}
+
+enum TipoDaltonismo {
+  PROTANOMALIA
+  PROTANOPIA
+  DEUTERANOMALIA
+  DEUTERANOPIA
+  TRITANOMALIA
+  TRITANOPIA
+  ACROMATOPSIA
+  NAO_SEI
+  PREFIRO_NAO_DIZER
+}
+
+model Usuario {
+  id                    String @id @default(uuid())
+
+  nome                  String?
+  email                 String? @unique
+  telefone              String? @unique
+  senhaHash             String?
+
+  dataNascimento        DateTime?
+  genero                Genero?
+  tipoDaltonismo        TipoDaltonismo?
+  nivelDificuldadeLooks Int?
+
+  provedorAutenticacao  ProvedorAutenticacao @default(EMAIL)
+  googleId              String? @unique
+
+  criadoEm              DateTime @default(now())
+  atualizadoEm          DateTime @updatedAt
+}
