@@ -11,12 +11,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum ProvedorAutenticacao {
-  EMAIL
-  TELEFONE
-  GOOGLE
-}
-
 enum Genero {
   MASCULINO
   FEMININO
@@ -40,18 +34,16 @@ enum TipoDaltonismo {
 model Usuario {
   id                    String @id @default(uuid())
 
+  cognitoSub            String @unique
+
   nome                  String?
   email                 String? @unique
   telefone              String? @unique
-  senhaHash             String?
 
   dataNascimento        DateTime?
   genero                Genero?
   tipoDaltonismo        TipoDaltonismo?
   nivelDificuldadeLooks Int?
-
-  provedorAutenticacao  ProvedorAutenticacao @default(EMAIL)
-  googleId              String? @unique
 
   criadoEm              DateTime @default(now())
   atualizadoEm          DateTime @updatedAt
