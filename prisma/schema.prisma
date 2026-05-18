@@ -38,7 +38,6 @@ model Usuario {
 
   nome                  String?
   email                 String? @unique
-  telefone              String? @unique
 
   dataNascimento        DateTime?
   genero                Genero?
