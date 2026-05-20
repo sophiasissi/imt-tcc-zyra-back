@@ -1,21 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-
-type UpdateProfileBody = {
-  dataNascimento?: string;
-  genero?: 'MASCULINO' | 'FEMININO' | 'NAO_BINARIO' | 'PREFIRO_NAO_DIZER' | 'OUTRO';
-  tipoDaltonismo?:
-    | 'PROTANOMALIA'
-    | 'PROTANOPIA'
-    | 'DEUTERANOMALIA'
-    | 'DEUTERANOPIA'
-    | 'TRITANOMALIA'
-    | 'TRITANOPIA'
-    | 'ACROMATOPSIA'
-    | 'NAO_SEI'
-    | 'PREFIRO_NAO_DIZER';
-  nivelDificuldadeLooks?: number;
-};
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class UsersService {
@@ -35,7 +20,7 @@ export class UsersService {
     return usuario;
   }
 
-  updateMe(cognitoSub: string, body: UpdateProfileBody) {
+  updateMe(cognitoSub: string, body: UpdateProfileDto) {
     return this.prisma.usuario.update({
       where: { cognitoSub },
       data: {
