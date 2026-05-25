@@ -7,6 +7,9 @@ import { AuthService } from './auth.service';
 import { ConfirmForgotPasswordDto } from './dto/confirm-forgot-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { SignUpDto } from './dto/signup.dto';
+import { ConfirmSignUpDto } from './dto/confirm-signup.dto';
+import { LoginDto } from './dto/login.dto';
 
 type AuthenticatedRequest = {
   user: {
@@ -21,13 +24,28 @@ export class AuthController {
     private readonly authService: AuthService,
   ) {}
 
+  @Post('signup')
+  signUp(@Body() body: SignUpDto) {
+    return this.authService.signUp(body.email, body.password);
+  }
+
+  @Post('confirm-signup')
+  confirmSignUp(@Body() body: ConfirmSignUpDto) {
+    return this.authService.confirmSignUp(body.email, body.confirmationCode);
+  }
+
+  @Post('login')
+  login(@Body() body: LoginDto) {
+    return this.authService.login(body.email, body.password);
+  }
+
   @Post('forgot-password')
   forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.authService.forgotPassword(body.email);
   }
 
   @Post('confirm-forgot-password')
-  async confirmForgotPassword(@Body() body: ConfirmForgotPasswordDto) {
+  confirmForgotPassword(@Body() body: ConfirmForgotPasswordDto) {
     return this.authService.confirmForgotPassword(
       body.email,
       body.confirmationCode,
