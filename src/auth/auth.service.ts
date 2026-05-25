@@ -6,6 +6,8 @@ import {
   ConfirmForgotPasswordCommand,
   InitiateAuthCommand,
   GlobalSignOutCommand,
+  SignUpCommand,
+  ConfirmSignUpCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
@@ -19,6 +21,61 @@ export class AuthService {
     });
 
     this.clientId = this.configService.getOrThrow<string>('COGNITO_CLIENT_ID');
+  }
+
+  async signUp(email: string, password: string) {
+    await this.cognitoClient.send(
+      new SignUpCommand({
+        ClientId: this.clientId,
+        Username: email,
+        Password: password,
+        UserAttributes: [
+          {
+            Name: 'email',
+            Value: email,
+          },
+        ],
+      }),
+    );
+
+    return {
+      message: 'Código de confirmação enviado para o email informado.',
+    };
+  }
+
+  async confirmSignUp(email: string, confirmationCode: string) {
+    await this.cognitoClient.send(
+      new ConfirmSignUpCommand({
+        ClientId: this.clientId,
+        Username: email,
+        ConfirmationCode: confirmationCode,
+      }),
+    );
+
+    return {
+      message: 'Cadastro confirmado com sucesso.',
+    };
+  }
+
+  async login(email: string, password: string) {
+    const response = await this.cognitoClient.send(
+      new InitiateAuthCommand({
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: this.clientId,
+        AuthParameters: {
+          USERNAME: email,
+          PASSWORD: password,
+        },
+      }),
+    );
+
+    return {
+      accessToken: response.AuthenticationResult?.AccessToken,
+      idToken: response.AuthenticationResult?.IdToken,
+      refreshToken: response.AuthenticationResult?.RefreshToken,
+      expiresIn: response.AuthenticationResult?.ExpiresIn,
+      tokenType: response.AuthenticationResult?.TokenType,
+    };
   }
 
   async forgotPassword(email: string) {
