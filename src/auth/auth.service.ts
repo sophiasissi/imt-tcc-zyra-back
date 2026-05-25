@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   CognitoIdentityProviderClient,
@@ -8,6 +13,7 @@ import {
   GlobalSignOutCommand,
   SignUpCommand,
   ConfirmSignUpCommand,
+  CognitoIdentityProviderServiceException,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
@@ -24,23 +30,37 @@ export class AuthService {
   }
 
   async signUp(email: string, password: string) {
-    await this.cognitoClient.send(
-      new SignUpCommand({
-        ClientId: this.clientId,
-        Username: email,
-        Password: password,
-        UserAttributes: [
-          {
-            Name: 'email',
-            Value: email,
-          },
-        ],
-      }),
-    );
+    try {
+      await this.cognitoClient.send(
+        new SignUpCommand({
+          ClientId: this.clientId,
+          Username: email,
+          Password: password,
+          UserAttributes: [
+            {
+              Name: 'email',
+              Value: email,
+            },
+          ],
+        }),
+      );
 
-    return {
-      message: 'Código de confirmação enviado para o email informado.',
-    };
+      return {
+        message: 'Código de confirmação enviado para o email informado.',
+      };
+    } catch (error) {
+      if (error instanceof CognitoIdentityProviderServiceException) {
+        if (error.name === 'UsernameExistsException') {
+          throw new ConflictException('Este email já está cadastrado.');
+        }
+
+        if (error.name === 'InvalidPasswordException') {
+          throw new BadRequestException('Senha inválida.');
+        }
+      }
+
+      throw error;
+    }
   }
 
   async confirmSignUp(email: string, confirmationCode: string) {
