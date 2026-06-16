@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, ConflictException, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { CognitoAuthGuard } from './cognito-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterProfileDto } from './dto/register-profile.dto';
@@ -42,20 +42,31 @@ export class AuthController {
   @Post('register-profile')
   async registerProfile(@Req() req: AuthenticatedRequest, @Body() body: RegisterProfileDto) {
     const cognitoSub = req.user.cognitoSub;
+    const normalizedEmail = body.email.trim().toLowerCase();
 
-    const usuarioExistente = await this.prisma.usuario.findUnique({
+    const usuarioExistentePorCognito = await this.prisma.usuario.findUnique({
       where: { cognitoSub },
     });
 
-    if (usuarioExistente) {
-      return usuarioExistente;
+    if (usuarioExistentePorCognito) {
+      return usuarioExistentePorCognito;
+    }
+
+    const usuarioExistentePorEmail = await this.prisma.usuario.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (usuarioExistentePorEmail) {
+      throw new ConflictException(
+        'Este email já possui uma conta no ZYRA. Entre com sua senha ou recupere o acesso caso tenha esquecido.',
+      );
     }
 
     return this.prisma.usuario.create({
       data: {
         cognitoSub,
-        nome: body.nome,
-        email: body.email,
+        nome: body.nome.trim(),
+        email: normalizedEmail,
       },
     });
   }
