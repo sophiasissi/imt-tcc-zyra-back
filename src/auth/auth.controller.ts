@@ -62,10 +62,12 @@ export class AuthController {
       );
     }
 
+    const nome = body.nome?.trim();
+
     return this.prisma.usuario.create({
       data: {
         cognitoSub,
-        nome: body.nome.trim(),
+        nome: nome ? nome : null,
         email: normalizedEmail,
       },
     });
