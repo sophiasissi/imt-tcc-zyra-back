@@ -15,6 +15,7 @@ import {
   GlobalSignOutCommand,
   SignUpCommand,
   ConfirmSignUpCommand,
+  ResendConfirmationCodeCommand,
   CognitoIdentityProviderServiceException,
 } from '@aws-sdk/client-cognito-identity-provider';
 
@@ -95,7 +96,7 @@ export class AuthService {
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
-      await this.cognitoClient.send(
+      const response = await this.cognitoClient.send(
         new SignUpCommand({
           ClientId: this.clientId,
           Username: normalizedEmail,
@@ -111,6 +112,9 @@ export class AuthService {
 
       return {
         message: 'Código de confirmação enviado para o email informado.',
+        // O sub definitivo do usuario ja' existe aqui, antes da confirmacao.
+        // E' com ele que o perfil e' gravado no mesmo momento do cadastro.
+        userSub: response.UserSub,
       };
     } catch (error) {
       this.handleCognitoError(error);
@@ -131,6 +135,40 @@ export class AuthService {
         message: 'Cadastro confirmado com sucesso.',
       };
     } catch (error) {
+      this.handleCognitoError(error);
+    }
+  }
+
+  /**
+   * Reenvia o codigo de confirmacao para quem criou a conta mas nao chegou a
+   * confirmar. Sem isso o cadastro interrompido deixava o email travado: o
+   * signup passava a acusar "email ja existe", o login acusava "conta nao
+   * confirmada" e nao havia nenhum jeito de obter um codigo novo.
+   */
+  async resendConfirmationCode(email: string) {
+    try {
+      await this.cognitoClient.send(
+        new ResendConfirmationCodeCommand({
+          ClientId: this.clientId,
+          Username: email.trim().toLowerCase(),
+        }),
+      );
+
+      return {
+        message: 'Enviamos um novo código de confirmação para seu email.',
+      };
+    } catch (error) {
+      // Conta ja confirmada: o Cognito recusa o reenvio. Nao e' erro do
+      // usuario, entao a mensagem precisa apontar para o login.
+      if (
+        error instanceof CognitoIdentityProviderServiceException &&
+        error.name === 'InvalidParameterException'
+      ) {
+        throw new BadRequestException(
+          'Esta conta já está confirmada. Entre com seu email e senha.',
+        );
+      }
+
       this.handleCognitoError(error);
     }
   }
