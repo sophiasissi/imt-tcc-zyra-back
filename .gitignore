@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 .vite/
 
 /generated/prisma
+
+# Resultados das avaliações do chat
+test/intencoes/resultados/
