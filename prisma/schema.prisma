@@ -31,19 +31,112 @@ enum TipoDaltonismo {
   PREFIRO_NAO_DIZER
 }
 
+// Valores da peca. Espelham src/clothing_analysis/taxonomy.py (visao) e
+// src/looks/taxonomia.ts: os tres precisam ter exatamente os mesmos codigos.
+
+enum Categoria {
+  CAMISETA
+  CAMISA
+  MOLETOM
+  JAQUETA
+  BLAZER
+  CALCA
+  SHORT
+  SAIA
+  VESTIDO
+  TENIS
+  SAPATO
+  BOLSA
+}
+
+enum Estilo {
+  CASUAL
+  SOCIAL
+  ESPORTIVO
+  STREETWEAR
+  ELEGANTE
+  BASICO
+}
+
+enum Estampa {
+  LISO
+  ESTAMPADO
+  LISTRADO
+  XADREZ
+  LOGO
+}
+
+enum Ocasiao {
+  DIA_A_DIA
+  TRABALHO
+  FESTA
+  ACADEMIA
+  PRAIA
+  CASA
+}
+
+enum Aquecimento {
+  LEVE
+  MEDIO
+  QUENTE
+}
+
+enum Material {
+  JEANS
+  COURO
+}
+
 model Usuario {
-  id                    String @id @default(uuid())
+  id String @id @default(uuid())
 
-  cognitoSub            String @unique
+  cognitoSub String @unique
 
-  nome                  String?
-  email                 String? @unique
+  nome  String?
+  email String? @unique
 
   dataNascimento        DateTime?
   genero                Genero?
   tipoDaltonismo        TipoDaltonismo?
   nivelDificuldadeLooks Int?
 
-  criadoEm              DateTime @default(now())
-  atualizadoEm          DateTime @updatedAt
+  roupas Roupa[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
+model Roupa {
+  id String @id @default(uuid())
+
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  nome String?
+
+  // Chave do objeto no S3, nao a URL. O bucket e privado (secao 11 do artigo)
+  // e URL assinada expira -- guardar um link daria imagem quebrada depois. A
+  // URL de leitura e gerada na hora de exibir a peca.
+  imagemS3Key String
+
+  // Resultado do /detect-color. E' o dado central do app: e' justamente o que
+  // a pessoa daltonica nao consegue obter sozinha.
+  corNome     String?
+  corHex      String?
+  corColorAdd String?
+
+  // Resultado da analise da peca pela OpenAI (/analyze-clothing). Nulo quando
+  // a IA nao teve certeza; a pessoa pode corrigir depois.
+  categoria   Categoria?
+  estilo      Estilo?
+  estampa     Estampa?
+  aquecimento Aquecimento?
+  material    Material?
+  ocasioes    Ocasiao[]    @default([])
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // O closet sempre lista as pecas de um usuario. Sem indice isso vira
+  // varredura da tabela inteira conforme o numero de pecas cresce.
+  @@index([usuarioId])
 }
