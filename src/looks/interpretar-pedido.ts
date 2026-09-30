@@ -167,6 +167,43 @@ const INTENCAO_SCHEMA = {
   },
 };
 
+const NEUTRAS_SEM_TOM: FamiliaCor[] = ['PRETO', 'BRANCO'];
+
+function semTomSeNeutra(cor: Cor | null): Cor | null {
+  if (!cor || !NEUTRAS_SEM_TOM.includes(cor.familia)) return cor;
+  return { ...cor, tom: null };
+}
+
+/**
+ * Correções determinísticas sobre a resposta da IA, para erros que um prompt
+ * não elimina por completo.
+ */
+export function ajustarIntencao(intencao: Intencao): Intencao {
+  const temFiltro =
+    intencao.ocasiao !== null ||
+    intencao.aquecimento !== null ||
+    intencao.estilo !== null ||
+    intencao.formalidade !== null ||
+    intencao.paletaNeutra ||
+    intencao.incluir.length > 0 ||
+    intencao.evitarCategorias.length > 0 ||
+    intencao.evitarCores.length > 0;
+
+  // Se a IA extraiu algum filtro, já dá para montar o look: perguntar só
+  // atrasaria o usuário. FORA_DE_ESCOPO fica como está ("quanto custa uma
+  // camisa social?" também tem filtro).
+  const tipo = intencao.tipo === 'ESCLARECER' && temFiltro ? 'LOOK' : intencao.tipo;
+
+  return {
+    ...intencao,
+    tipo,
+    pergunta: tipo === 'ESCLARECER' ? intencao.pergunta : null,
+    // "Preto claro" e "branco escuro" não existem no ColorADD.
+    incluir: intencao.incluir.map((peca) => ({ ...peca, cor: semTomSeNeutra(peca.cor) })),
+    evitarCores: intencao.evitarCores.map((cor) => semTomSeNeutra(cor)!),
+  };
+}
+
 export async function interpretarPedido(
   client: OpenAI,
   mensagem: string,
@@ -198,7 +235,7 @@ export async function interpretarPedido(
   }
 
   return {
-    intencao: JSON.parse(content) as Intencao,
+    intencao: ajustarIntencao(JSON.parse(content) as Intencao),
     tokens: {
       entrada: response.usage?.prompt_tokens ?? 0,
       saida: response.usage?.completion_tokens ?? 0,
