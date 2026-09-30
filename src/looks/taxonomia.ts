@@ -31,6 +31,12 @@ export const OCASIOES = ['DIA_A_DIA', 'TRABALHO', 'FESTA', 'ACADEMIA', 'PRAIA', 
 
 export const AQUECIMENTOS = ['LEVE', 'MEDIO', 'QUENTE'] as const;
 
+// Só os materiais que a visão reconhece pela foto; o resto fica null.
+export const MATERIAIS = ['JEANS', 'COURO'] as const;
+
+// Não é guardado na peça: o motor deduz a formalidade da peça pelo estilo.
+export const FORMALIDADES = ['BAIXA', 'MEDIA', 'ALTA'] as const;
+
 // Famílias do ColorADD, as mesmas que a visão devolve em colorAddSymbol.
 export const FAMILIAS_COR = [
   'VERMELHO',
@@ -52,5 +58,7 @@ export type Estilo = (typeof ESTILOS)[number];
 export type Estampa = (typeof ESTAMPAS)[number];
 export type Ocasiao = (typeof OCASIOES)[number];
 export type Aquecimento = (typeof AQUECIMENTOS)[number];
+export type Material = (typeof MATERIAIS)[number];
+export type Formalidade = (typeof FORMALIDADES)[number];
 export type FamiliaCor = (typeof FAMILIAS_COR)[number];
 export type Tom = (typeof TONS)[number];

@@ -5,9 +5,11 @@
  *   npm run avaliar:intencoes
  *   npm run avaliar:intencoes -- --rodadas 3
  *   npm run avaliar:intencoes -- --filtro daltonismo
+ *   npm run avaliar:intencoes -- --modelo gpt-4.1-mini
  *
  * Em cada caso, campo omitido em "esperado" vale null (ou lista vazia), para
- * pegar a IA inventando filtro que o usuário não pediu. Casos com "lacuna"
+ * pegar a IA inventando filtro que o usuário não pediu; "*" aceita qualquer
+ * valor (casos ambíguos). Casos com "lacuna"
  * são pedidos que a taxonomia atual não cobre: o esperado é a IA registrar o
  * trecho em naoMapeado.
  */
@@ -21,14 +23,17 @@ import {
   Intencao,
   interpretarPedido,
   MensagemHistorico,
+  MODELO_INTERPRETACAO,
   PecaDesejada,
 } from '../src/looks/interpretar-pedido';
+
+type Esperado = { [campo in keyof Intencao]?: Intencao[campo] | '*' };
 
 type Caso = {
   id: string;
   mensagem: string;
   historico?: MensagemHistorico[];
-  esperado: Partial<Intencao> & Pick<Intencao, 'tipo'>;
+  esperado: Esperado & Pick<Intencao, 'tipo'>;
   lacuna?: string;
 };
 
@@ -38,13 +43,16 @@ type Resultado = {
   erro?: string;
   divergencias: string[];
   instavel: string[];
+  tokens: { entrada: number; saida: number };
 };
 
 const CAMPOS = [
   'tipo',
   'ocasiao',
+  'formalidade',
   'estilo',
   'aquecimento',
+  'paletaNeutra',
   'incluir',
   'evitarCategorias',
   'evitarCores',
@@ -61,12 +69,15 @@ function chaveCor(cor: Cor | null) {
 }
 
 function chavePeca(peca: PecaDesejada) {
-  return `${peca.categoria ?? '*'}/${chaveCor(peca.cor)}`;
+  const material = peca.material ? `/${peca.material}` : '';
+  return `${peca.categoria ?? '*'}/${chaveCor(peca.cor)}${material}`;
 }
 
 /** Representação canônica do campo, para comparar sem depender da ordem. */
 function normalizar(intencao: Partial<Intencao>, campo: Campo): string {
   switch (campo) {
+    case 'paletaNeutra':
+      return String(intencao.paletaNeutra ?? false);
     case 'incluir':
       return (intencao.incluir ?? []).map(chavePeca).sort().join(', ') || '[]';
     case 'evitarCores':
@@ -84,20 +95,29 @@ function maioria(valores: string[]) {
   return [...contagem.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
-async function avaliarCaso(client: OpenAI, caso: Caso, rodadas: number): Promise<Resultado> {
+async function avaliarCaso(
+  client: OpenAI,
+  caso: Caso,
+  rodadas: number,
+  modelo: string,
+): Promise<Resultado> {
   const tentativas: Intencao[] = [];
+  const tokens = { entrada: 0, saida: 0 };
   let erro: string | undefined;
 
   for (let i = 0; i < rodadas; i++) {
     try {
-      tentativas.push(await interpretarPedido(client, caso.mensagem, caso.historico));
+      const resultado = await interpretarPedido(client, caso.mensagem, caso.historico, modelo);
+      tentativas.push(resultado.intencao);
+      tokens.entrada += resultado.tokens.entrada;
+      tokens.saida += resultado.tokens.saida;
     } catch (e) {
       erro = e instanceof Error ? e.message : String(e);
     }
   }
 
   if (tentativas.length === 0) {
-    return { caso, obtido: null, erro, divergencias: ['erro'], instavel: [] };
+    return { caso, obtido: null, erro, divergencias: ['erro'], instavel: [], tokens };
   }
 
   const divergencias: string[] = [];
@@ -107,14 +127,16 @@ async function avaliarCaso(client: OpenAI, caso: Caso, rodadas: number): Promise
     const valores = tentativas.map((t) => normalizar(t, campo));
     if (new Set(valores).size > 1) instavel.push(campo);
 
-    const esperado = normalizar(caso.esperado, campo);
+    if (caso.esperado[campo] === '*') continue;
+
+    const esperado = normalizar(caso.esperado as Partial<Intencao>, campo);
     const obtido = maioria(valores);
     if (esperado !== obtido) {
       divergencias.push(`${campo}: esperado ${esperado}, veio ${obtido}`);
     }
   }
 
-  return { caso, obtido: tentativas[0], erro, divergencias, instavel };
+  return { caso, obtido: tentativas[0], erro, divergencias, instavel, tokens };
 }
 
 async function emParalelo<T, R>(itens: T[], limite: number, fn: (item: T) => Promise<R>) {
@@ -150,16 +172,19 @@ async function main() {
 
   const rodadas = Number(lerArgumento('rodadas') ?? 1);
   const filtro = lerArgumento('filtro');
+  const modelo = lerArgumento('modelo') ?? MODELO_INTERPRETACAO;
 
   const casos: Caso[] = JSON.parse(readFileSync(join(PASTA, 'pedidos.json'), 'utf-8'));
   const selecionados = filtro ? casos.filter((caso) => caso.id.includes(filtro)) : casos;
 
   const client = new OpenAI();
   const resultados = await emParalelo(selecionados, CONCORRENCIA, (caso) =>
-    avaliarCaso(client, caso, rodadas),
+    avaliarCaso(client, caso, rodadas, modelo),
   );
 
-  console.log(`\nInterpretação de pedidos: ${selecionados.length} casos, ${rodadas} rodada(s)\n`);
+  console.log(
+    `\nInterpretação de pedidos (${modelo}): ${selecionados.length} casos, ${rodadas} rodada(s)\n`,
+  );
 
   for (const campo of CAMPOS) {
     const acertos = resultados.filter(
@@ -172,6 +197,13 @@ async function main() {
 
   const perfeitos = resultados.filter((r) => r.divergencias.length === 0).length;
   console.log(`${'caso inteiro'.padEnd(17)} ${porcentagem(perfeitos, resultados.length)}`);
+
+  const chamadas = resultados.length * rodadas;
+  const entrada = resultados.reduce((soma, r) => soma + r.tokens.entrada, 0);
+  const saida = resultados.reduce((soma, r) => soma + r.tokens.saida, 0);
+  console.log(
+    `\nTokens por chamada (média): ${Math.round(entrada / chamadas)} de entrada, ${Math.round(saida / chamadas)} de saída`,
+  );
 
   const comLacuna = resultados.filter((r) => r.caso.lacuna);
   const lacunasDetectadas = comLacuna.filter((r) => r.obtido?.naoMapeado.length);

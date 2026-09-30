@@ -9,6 +9,10 @@ import {
   Estilo,
   FAMILIAS_COR,
   FamiliaCor,
+  FORMALIDADES,
+  Formalidade,
+  MATERIAIS,
+  Material,
   OCASIOES,
   Ocasiao,
   TONS,
@@ -23,6 +27,7 @@ export type Cor = {
 export type PecaDesejada = {
   categoria: Categoria | null;
   cor: Cor | null;
+  material: Material | null;
 };
 
 export type TipoIntencao = 'LOOK' | 'ESCLARECER' | 'FORA_DE_ESCOPO';
@@ -34,8 +39,10 @@ export type TipoIntencao = 'LOOK' | 'ESCLARECER' | 'FORA_DE_ESCOPO';
 export type Intencao = {
   tipo: TipoIntencao;
   ocasiao: Ocasiao | null;
+  formalidade: Formalidade | null;
   estilo: Estilo | null;
   aquecimento: Aquecimento | null;
+  paletaNeutra: boolean;
   incluir: PecaDesejada[];
   evitarCategorias: Categoria[];
   evitarCores: Cor[];
@@ -43,60 +50,69 @@ export type Intencao = {
   naoMapeado: string[];
 };
 
+export type ResultadoInterpretacao = {
+  intencao: Intencao;
+  tokens: { entrada: number; saida: number };
+};
+
 export type MensagemHistorico = {
   autor: 'usuario' | 'zyra';
   texto: string;
 };
 
-export const MODELO_INTERPRETACAO = 'gpt-4o-mini';
+export const MODELO_INTERPRETACAO = process.env.OPENAI_MODELO_INTERPRETACAO ?? 'gpt-4.1-mini';
 
-const DESCRICAO_OCASIOES: Record<Ocasiao, string> = {
-  DIA_A_DIA: 'rotina, faculdade, passeio',
-  TRABALHO: 'escritório, reunião, entrevista',
-  FESTA: 'aniversário, balada, casamento, evento',
-  ACADEMIA: 'treino, corrida',
-  PRAIA: 'praia, piscina',
-  CASA: 'ficar em casa, dormir',
-};
+// Modelos com raciocínio (gpt-5+, o*) não aceitam temperature.
+const aceitaTemperatura = (modelo: string) => !/^(gpt-[5-9]|o\d)/.test(modelo);
 
-function descrever(descricoes: Record<string, string>) {
-  return Object.entries(descricoes)
-    .map(([codigo, descricao]) => `  - ${codigo}: ${descricao}`)
-    .join('\n');
-}
+// A resposta é só o JSON da intenção; o limite corta qualquer texto a mais.
+const MAX_TOKENS_RESPOSTA = 250;
 
+// O prompt vai a cada mensagem do chat. A maior parte dos tokens de entrada é o
+// schema; encurtar as regras abaixo economiza pouco e derruba a qualidade.
 const PROMPT_SISTEMA = `
-Você interpreta pedidos de look no ZYRA, um app de vestuário para pessoas daltônicas.
-Seu trabalho é só traduzir o pedido em filtros. Outro sistema escolhe as peças no
-closet do usuário e completa o que não foi dito com valores padrão.
+Você converte pedidos de look do ZYRA, um app de vestuário para pessoas daltônicas,
+em filtros. Outro sistema escolhe as peças no closet do usuário e completa o que não
+foi dito. Não escreva explicações: só preencha os campos.
 
 Campos:
 - tipo:
-  - LOOK (padrão): o usuário quer uma sugestão de roupa, mesmo que genérica
-    ("monta um look", "sei lá", "tá frio"). Na dúvida entre LOOK e ESCLARECER,
-    escolha LOOK.
+  - LOOK (padrão): o usuário quer uma sugestão de roupa, mesmo que genérica ("monta
+    um look", "sei lá", "tá frio") ou que seja só a resposta a uma pergunta sua
+    ("trabalho"). Na dúvida entre LOOK e ESCLARECER, escolha LOOK.
   - ESCLARECER: só quando a mensagem não pede nada ("oi") ou cita um evento sem
-    dizer qual é ("tenho um evento amanhã"). Preencha "pergunta" com uma pergunta
-    curta e simpática.
-  - FORA_DE_ESCOPO: qualquer coisa que não seja pedir um look com as roupas do
-    usuário (previsão do tempo, preços, piadas, perguntas gerais).
+    dizer qual é ("tenho um evento amanhã"). Preencha "pergunta" com uma frase curta.
+  - FORA_DE_ESCOPO: qualquer coisa que não seja pedir um look (previsão do tempo,
+    preços, piadas, perguntas gerais).
 - ocasiao:
-${descrever(DESCRICAO_OCASIOES)}
-- estilo: ${ESTILOS.join(', ')}. Só preencha se o usuário disser como quer se vestir
-  ("arrumado", "básico", "esportivo"). Não deduza o estilo a partir da ocasião.
-- aquecimento: só preencha se o usuário falar do clima ou da temperatura.
-  LEVE para calor, MEDIO para frio leve ou clima ameno, QUENTE para frio.
-- incluir: peças que o usuário quer usar, com categoria e/ou cor.
-- evitarCategorias e evitarCores: só o que o usuário disse explicitamente que não quer.
-- categorias: ${CATEGORIAS.join(', ')}.
-- cores usam as famílias do ColorADD: ${FAMILIAS_COR.join(', ')}, com tom
-  ${TONS.join(' ou ')} opcional. Rosa é VERMELHO CLARO e marrom é CASTANHO.
-- naoMapeado: o que SOBRA do pedido depois de preencher os campos acima e que
-  mudaria o look, com as palavras do usuário. Não repita o que já virou campo e
-  não registre datas (hoje, amanhã, sábado). Na maioria dos pedidos a lista fica
-  vazia. Nunca force um valor que não corresponde: deixe o campo nulo e registre
-  o trecho aqui.
+  - DIA_A_DIA: rotina, faculdade, passeio, churrasco
+  - TRABALHO: escritório, reunião, entrevista
+  - FESTA: aniversário, balada, casamento
+  - ACADEMIA: treino, corrida
+  - PRAIA: praia, piscina
+  - CASA: ficar na própria casa, dormir
+- formalidade: ${FORMALIDADES.join(', ')}. Só preencha se o pedido indicar o nível
+  (casamento, entrevista ou "arrumado" = ALTA; "bem à vontade" = BAIXA).
+- estilo: ${ESTILOS.join(', ')}. Só preencha se o usuário nomear o estilo. Não deduza
+  o estilo nem a formalidade a partir da ocasião.
+- aquecimento: só se o usuário falar do clima. LEVE para calor, MEDIO para frio leve
+  ou clima ameno, QUENTE para frio.
+- paletaNeutra: true se o usuário pedir só neutros, pouca cor ou cores "seguras".
+- incluir: peças que o usuário quer usar. Preencha só a categoria, a cor e o material
+  que ele disse.
+- evitarCategorias e evitarCores: só o que o usuário disse que não quer.
+- categorias: ${CATEGORIAS.join(', ')}. materiais: ${MATERIAIS.join(', ')}.
+- cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}
+  opcional. Rosa = VERMELHO CLARO, marrom = CASTANHO, marinho = AZUL ESCURO,
+  vinho = VERMELHO ESCURO.
+- naoMapeado: termos curtos (até 3 palavras) que mudariam o look e não couberam em
+  nenhum campo. Não repita o que já virou campo nem registre datas. Normalmente vazio.
 `.trim();
+
+const nulo = <T extends readonly string[]>(valores: T) => ({
+  type: ['string', 'null'],
+  enum: [...valores, null],
+});
 
 const COR_SCHEMA = {
   type: 'object',
@@ -104,7 +120,7 @@ const COR_SCHEMA = {
   required: ['familia', 'tom'],
   properties: {
     familia: { type: 'string', enum: [...FAMILIAS_COR] },
-    tom: { type: ['string', 'null'], enum: [...TONS, null] },
+    tom: nulo(TONS),
   },
 };
 
@@ -114,8 +130,10 @@ const INTENCAO_SCHEMA = {
   required: [
     'tipo',
     'ocasiao',
+    'formalidade',
     'estilo',
     'aquecimento',
+    'paletaNeutra',
     'incluir',
     'evitarCategorias',
     'evitarCores',
@@ -124,18 +142,21 @@ const INTENCAO_SCHEMA = {
   ],
   properties: {
     tipo: { type: 'string', enum: ['LOOK', 'ESCLARECER', 'FORA_DE_ESCOPO'] },
-    ocasiao: { type: ['string', 'null'], enum: [...OCASIOES, null] },
-    estilo: { type: ['string', 'null'], enum: [...ESTILOS, null] },
-    aquecimento: { type: ['string', 'null'], enum: [...AQUECIMENTOS, null] },
+    ocasiao: nulo(OCASIOES),
+    formalidade: nulo(FORMALIDADES),
+    estilo: nulo(ESTILOS),
+    aquecimento: nulo(AQUECIMENTOS),
+    paletaNeutra: { type: 'boolean' },
     incluir: {
       type: 'array',
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['categoria', 'cor'],
+        required: ['categoria', 'cor', 'material'],
         properties: {
-          categoria: { type: ['string', 'null'], enum: [...CATEGORIAS, null] },
+          categoria: nulo(CATEGORIAS),
           cor: { anyOf: [COR_SCHEMA, { type: 'null' }] },
+          material: nulo(MATERIAIS),
         },
       },
     },
@@ -150,10 +171,12 @@ export async function interpretarPedido(
   client: OpenAI,
   mensagem: string,
   historico: MensagemHistorico[] = [],
-): Promise<Intencao> {
+  modelo: string = MODELO_INTERPRETACAO,
+): Promise<ResultadoInterpretacao> {
   const response = await client.chat.completions.create({
-    model: MODELO_INTERPRETACAO,
-    temperature: 0,
+    model: modelo,
+    ...(aceitaTemperatura(modelo) ? { temperature: 0 } : {}),
+    max_completion_tokens: MAX_TOKENS_RESPOSTA,
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'intencao', strict: true, schema: INTENCAO_SCHEMA },
@@ -174,5 +197,11 @@ export async function interpretarPedido(
     throw new Error('A IA não devolveu uma interpretação para o pedido.');
   }
 
-  return JSON.parse(content) as Intencao;
+  return {
+    intencao: JSON.parse(content) as Intencao,
+    tokens: {
+      entrada: response.usage?.prompt_tokens ?? 0,
+      saida: response.usage?.completion_tokens ?? 0,
+    },
+  };
 }
