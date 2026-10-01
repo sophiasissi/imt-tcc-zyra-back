@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Roupa } from '@prisma/client';
+import { Peca } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
-import { CreateRoupaDto } from './dto/create-roupa.dto';
-import { UpdateRoupaDto } from './dto/update-roupa.dto';
-import { VisionService } from './vision.service';
+import { CreatePecaDto } from './dto/create-peca.dto';
+import { UpdatePecaDto } from './dto/update-peca.dto';
+import { CorDaPeca, VisionService } from './vision.service';
 
 const EXTENSOES: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -15,7 +15,7 @@ const EXTENSOES: Record<string, string> = {
 };
 
 @Injectable()
-export class RoupasService {
+export class PecasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -33,32 +33,35 @@ export class RoupasService {
    * etapa so roda se a anterior deu certo; se a 2 ou a 3 falhar, a foto ja
    * enviada e apagada para nao sobrar arquivo orfao no bucket.
    */
-  async create(cognitoSub: string, foto: Express.Multer.File, dto: CreateRoupaDto) {
+  async create(cognitoSub: string, foto: Express.Multer.File, dto: CreatePecaDto) {
     const usuario = await this.findUsuario(cognitoSub);
+
+    // A cor e obrigatoria. Normalmente vem do app; se nao veio, a leitura e
+    // gratuita e acontece antes do upload, entao uma falha aqui nao deixa nada
+    // para limpar.
+    const cor = await this.resolverCor(foto, dto);
 
     const extensao = EXTENSOES[foto.mimetype] ?? 'jpg';
     const imagemS3Key = `usuarios/${usuario.id}/roupas/${randomUUID()}.${extensao}`;
 
     await this.s3.upload(imagemS3Key, foto.buffer, foto.mimetype);
 
-    let roupa: Roupa;
+    let peca: Peca;
 
     try {
       const analise = await this.vision.analisarRoupa(foto.buffer, foto.mimetype);
 
-      roupa = await this.prisma.roupa.create({
+      peca = await this.prisma.peca.create({
         data: {
           usuarioId: usuario.id,
           imagemS3Key,
-          corNome: dto.corNome,
-          corHex: dto.corHex,
-          corColorAdd: dto.corColorAdd,
           categoria: analise.category,
           estilo: analise.style,
           estampa: analise.pattern,
+          ocasioes: analise.occasions,
           aquecimento: analise.warmth,
           material: analise.material,
-          ocasioes: analise.occasions,
+          ...cor,
         },
       });
     } catch (error) {
@@ -66,29 +69,29 @@ export class RoupasService {
       throw error;
     }
 
-    return this.toResponse(roupa);
+    return this.toResponse(peca);
   }
 
   async findAll(cognitoSub: string) {
     const usuario = await this.findUsuario(cognitoSub);
 
-    const roupas = await this.prisma.roupa.findMany({
+    const pecas = await this.prisma.peca.findMany({
       where: { usuarioId: usuario.id },
       orderBy: { criadoEm: 'desc' },
     });
 
-    return Promise.all(roupas.map((roupa) => this.toResponse(roupa)));
+    return Promise.all(pecas.map((peca) => this.toResponse(peca)));
   }
 
   async findOne(cognitoSub: string, id: string) {
-    return this.toResponse(await this.findRoupaDoUsuario(cognitoSub, id));
+    return this.toResponse(await this.findPecaDoUsuario(cognitoSub, id));
   }
 
-  async update(cognitoSub: string, id: string, dto: UpdateRoupaDto) {
-    const roupa = await this.findRoupaDoUsuario(cognitoSub, id);
+  async update(cognitoSub: string, id: string, dto: UpdatePecaDto) {
+    const peca = await this.findPecaDoUsuario(cognitoSub, id);
 
-    const atualizada = await this.prisma.roupa.update({
-      where: { id: roupa.id },
+    const atualizada = await this.prisma.peca.update({
+      where: { id: peca.id },
       data: dto,
     });
 
@@ -96,12 +99,20 @@ export class RoupasService {
   }
 
   async remove(cognitoSub: string, id: string) {
-    const roupa = await this.findRoupaDoUsuario(cognitoSub, id);
+    const peca = await this.findPecaDoUsuario(cognitoSub, id);
 
-    await this.prisma.roupa.delete({ where: { id: roupa.id } });
-    await this.s3.deleteQuietly(roupa.imagemS3Key);
+    await this.prisma.peca.delete({ where: { id: peca.id } });
+    await this.s3.deleteQuietly(peca.imagemS3Key);
 
     return { message: 'Peça removida do seu closet.' };
+  }
+
+  private async resolverCor(foto: Express.Multer.File, dto: CreatePecaDto): Promise<CorDaPeca> {
+    if (dto.corNome && dto.hex && dto.colorAddSymbol) {
+      return { corNome: dto.corNome, hex: dto.hex, colorAddSymbol: dto.colorAddSymbol };
+    }
+
+    return this.vision.detectarCor(foto.buffer, foto.mimetype);
   }
 
   private async findUsuario(cognitoSub: string) {
@@ -120,22 +131,22 @@ export class RoupasService {
    * Busca a peca garantindo que ela pertence a quem pediu. Peca de outro
    * usuario responde 404, igual a inexistente, para nao revelar que o id existe.
    */
-  private async findRoupaDoUsuario(cognitoSub: string, id: string) {
+  private async findPecaDoUsuario(cognitoSub: string, id: string) {
     const usuario = await this.findUsuario(cognitoSub);
 
-    const roupa = await this.prisma.roupa.findFirst({
+    const peca = await this.prisma.peca.findFirst({
       where: { id, usuarioId: usuario.id },
     });
 
-    if (!roupa) {
+    if (!peca) {
       throw new NotFoundException('Peça não encontrada no seu closet.');
     }
 
-    return roupa;
+    return peca;
   }
 
-  private async toResponse(roupa: Roupa) {
-    const { imagemS3Key, ...dados } = roupa;
+  private async toResponse(peca: Peca) {
+    const { imagemS3Key, ...dados } = peca;
 
     return {
       ...dados,
