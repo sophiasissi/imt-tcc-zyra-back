@@ -99,39 +99,46 @@ model Usuario {
   tipoDaltonismo        TipoDaltonismo?
   nivelDificuldadeLooks Int?
 
-  roupas Roupa[]
+  pecas Peca[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 }
 
-model Roupa {
+model Peca {
   id String @id @default(uuid())
 
   usuarioId String
   usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  nome String?
-
   // Chave do objeto no S3, nao a URL. O bucket e privado (secao 11 do artigo)
   // e URL assinada expira -- guardar um link daria imagem quebrada depois. A
-  // URL de leitura e gerada na hora de exibir a peca.
+  // API devolve `imagemUrl`, uma URL assinada gerada na hora de exibir a peca.
   imagemS3Key String
 
-  // Resultado do /detect-color. E' o dado central do app: e' justamente o que
-  // a pessoa daltonica nao consegue obter sozinha.
-  corNome     String?
-  corHex      String?
-  corColorAdd String?
-
-  // Resultado da analise da peca pela OpenAI (/analyze-clothing). Nulo quando
-  // a IA nao teve certeza; a pessoa pode corrigir depois.
-  categoria   Categoria?
+  // Resultado da analise da peca pela OpenAI (/analyze-clothing). A categoria
+  // e obrigatoria: sem ela a peca nao entra em looks e o cadastro e recusado.
+  // O resto fica nulo quando a IA nao teve certeza; a pessoa corrige depois.
+  categoria   Categoria
   estilo      Estilo?
   estampa     Estampa?
-  aquecimento Aquecimento?
-  material    Material?
   ocasioes    Ocasiao[]    @default([])
+  aquecimento Aquecimento?
+  // So jeans e couro, os materiais que a IA reconhece com confianca pela foto.
+  material    Material?
+
+  // Resultado do /detect-color. E' o dado central do app: e' justamente o que
+  // a pessoa daltonica nao consegue obter sozinha. O chat de looks compara as
+  // cores pelo hex.
+  corNome        String // "Azul Claro"
+  hex            String // "#8FB3E0"
+  colorAddSymbol String // "COLORADD_AZUL_CLARO"
+
+  // Segunda cor de pecas listradas ou estampadas. A visao ainda nao preenche;
+  // os campos ja existem para nao exigir outra migration quando preencher.
+  corSecundariaNome        String?
+  hexSecundario            String?
+  colorAddSymbolSecundario String?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt

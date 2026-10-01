@@ -16,9 +16,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
-import { CreateRoupaDto } from './dto/create-roupa.dto';
-import { UpdateRoupaDto } from './dto/update-roupa.dto';
-import { RoupasService } from './roupas.service';
+import { CreatePecaDto } from './dto/create-peca.dto';
+import { UpdatePecaDto } from './dto/update-peca.dto';
+import { PecasService } from './pecas.service';
 
 type AuthenticatedRequest = {
   user: {
@@ -31,9 +31,9 @@ const TAMANHO_MAXIMO_FOTO = 10 * 1024 * 1024;
 const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/webp'];
 
 @UseGuards(CognitoAuthGuard)
-@Controller('roupas')
-export class RoupasController {
-  constructor(private readonly roupasService: RoupasService) {}
+@Controller('pecas')
+export class PecasController {
+  constructor(private readonly pecasService: PecasService) {}
 
   @Post()
   @UseInterceptors(
@@ -52,36 +52,36 @@ export class RoupasController {
   create(
     @Req() req: AuthenticatedRequest,
     @UploadedFile() foto: Express.Multer.File | undefined,
-    @Body() body: CreateRoupaDto,
+    @Body() body: CreatePecaDto,
   ) {
     if (!foto) {
       throw new BadRequestException('Envie a foto da peça.');
     }
 
-    return this.roupasService.create(req.user.cognitoSub, foto, body);
+    return this.pecasService.create(req.user.cognitoSub, foto, body);
   }
 
   @Get()
   findAll(@Req() req: AuthenticatedRequest) {
-    return this.roupasService.findAll(req.user.cognitoSub);
+    return this.pecasService.findAll(req.user.cognitoSub);
   }
 
   @Get(':id')
   findOne(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.roupasService.findOne(req.user.cognitoSub, id);
+    return this.pecasService.findOne(req.user.cognitoSub, id);
   }
 
   @Patch(':id')
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: UpdateRoupaDto,
+    @Body() body: UpdatePecaDto,
   ) {
-    return this.roupasService.update(req.user.cognitoSub, id, body);
+    return this.pecasService.update(req.user.cognitoSub, id, body);
   }
 
   @Delete(':id')
   remove(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.roupasService.remove(req.user.cognitoSub, id);
+    return this.pecasService.remove(req.user.cognitoSub, id);
   }
 }

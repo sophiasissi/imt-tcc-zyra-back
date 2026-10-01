@@ -3,10 +3,11 @@ import { IsHexColor, IsOptional, IsString, MaxLength } from 'class-validator';
 /**
  * Campos de texto que acompanham a foto no multipart.
  *
- * A cor vem da tela de captura (/detect-color, gratuito). O resto das
- * caracteristicas o back obtem sozinho pela analise da peca.
+ * A cor vem da tela de captura (/detect-color, gratuito). Se o app nao mandar
+ * a cor completa, o back le a cor da foto sozinho. O resto das
+ * caracteristicas vem da analise da peca.
  */
-export class CreateRoupaDto {
+export class CreatePecaDto {
   @IsOptional()
   @IsString()
   @MaxLength(60)
@@ -14,10 +15,10 @@ export class CreateRoupaDto {
 
   @IsOptional()
   @IsHexColor()
-  corHex?: string;
+  hex?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(60)
-  corColorAdd?: string;
+  colorAddSymbol?: string;
 }
