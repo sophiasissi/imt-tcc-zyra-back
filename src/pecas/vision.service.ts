@@ -64,10 +64,10 @@ export class VisionService {
 
     // Sem categoria nao ha como usar a peca em looks. Acontece quando a foto
     // escapou da validacao (um objeto parecido com roupa) ou e de algo fora da
-    // taxonomia, como bone e chapeu.
+    // taxonomia, como bone, chapeu, bolsa e mochila.
     if (!analise.category) {
       throw new UnprocessableEntityException(
-        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis, sapatos e bolsas.',
+        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
       );
     }
 
