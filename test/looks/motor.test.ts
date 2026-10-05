@@ -41,6 +41,7 @@ function intencao(extras: Partial<Intencao> = {}): Intencao {
     evitarCores: [],
     pergunta: null,
     naoMapeado: [],
+    trocar: [],
     ...extras,
   };
 }
