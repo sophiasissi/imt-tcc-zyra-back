@@ -51,7 +51,7 @@
 
   {"id": "combinado-reuniao-frio", "mensagem": "reunião de trabalho e tá frio", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO", "aquecimento": "QUENTE"}},
   {"id": "combinado-festa-confortavel", "mensagem": "festa à noite, quero algo elegante mas confortável", "esperado": {"tipo": "LOOK", "ocasiao": "FESTA", "estilo": "ELEGANTE", "formalidade": "*"}, "lacuna": "conforto não é atributo da peça"},
-  {"id": "combinado-praia-bolsa", "mensagem": "praia com minha bolsa marrom", "esperado": {"tipo": "LOOK", "ocasiao": "PRAIA", "incluir": [{"categoria": "BOLSA", "cor": {"familia": "CASTANHO", "tom": null}, "material": null}]}},
+  {"id": "combinado-praia-bolsa", "mensagem": "praia com minha bolsa marrom", "esperado": {"tipo": "LOOK", "ocasiao": "PRAIA"}, "lacuna": "bolsa não é cadastrável: não pode virar filtro de peça"},
   {"id": "combinado-academia-calor", "mensagem": "academia, tá calor e não quero usar preto", "esperado": {"tipo": "LOOK", "ocasiao": "ACADEMIA", "aquecimento": "LEVE", "evitarCores": [{"familia": "PRETO", "tom": null}]}},
   {"id": "combinado-duas-ocasioes", "mensagem": "vou trabalhar e depois tenho happy hour", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO"}, "lacuna": "duas ocasiões no mesmo dia"},
 

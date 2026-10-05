@@ -46,7 +46,6 @@ enum Categoria {
   VESTIDO
   TENIS
   SAPATO
-  BOLSA
 }
 
 enum Estilo {

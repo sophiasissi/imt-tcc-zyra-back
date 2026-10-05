@@ -99,7 +99,8 @@ Campos:
   ou clima ameno, QUENTE para frio.
 - paletaNeutra: true se o usuário pedir só neutros, pouca cor ou cores "seguras".
 - incluir: peças que o usuário quer usar. Preencha só a categoria, a cor e o material
-  que ele disse.
+  que ele disse. Bolsa, mochila, boné e outros acessórios não fazem parte do closet:
+  não entram em incluir, vão para naoMapeado.
 - evitarCategorias e evitarCores: só o que o usuário disse que não quer.
 - categorias: ${CATEGORIAS.join(', ')}. materiais: ${MATERIAIS.join(', ')}.
 - cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}

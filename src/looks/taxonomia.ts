@@ -13,7 +13,6 @@ export const CATEGORIAS = [
   'VESTIDO',
   'TENIS',
   'SAPATO',
-  'BOLSA',
 ] as const;
 
 export const ESTILOS = [

@@ -71,14 +71,14 @@
   {"id": "cor-duas-pecas", "mensagem": "quero usar minha camisa branca e a calça preta", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CAMISA", "cor": {"familia": "BRANCO", "tom": null}}, {"categoria": "CALCA", "cor": {"familia": "PRETO", "tom": null}}]}},
 
   {"id": "peca-jeans-clara", "mensagem": "com a calça jeans clara", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CALCA", "cor": "*", "material": "JEANS"}]}},
-  {"id": "peca-bolsa-couro", "mensagem": "vou levar minha bolsa de couro", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "BOLSA", "cor": null, "material": "COURO"}]}},
+  {"id": "peca-bolsa-couro", "mensagem": "vou levar minha bolsa de couro", "esperado": {"tipo": "LOOK"}, "lacuna": "bolsa não é cadastrável: não pode virar filtro de peça"},
   {"id": "peca-jaqueta-jeans", "mensagem": "com a jaqueta jeans", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "JAQUETA", "cor": null, "material": "JEANS"}]}},
   {"id": "peca-xadrez", "mensagem": "quero usar minha camisa xadrez", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CAMISA", "cor": null}]}, "lacuna": "estampa da peça desejada"},
   {"id": "peca-banda", "mensagem": "com a camiseta do Nirvana", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CAMISETA", "cor": null}]}, "lacuna": "peça específica pela estampa"},
   {"id": "peca-florido", "mensagem": "com aquele vestido florido", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "VESTIDO", "cor": null}]}, "lacuna": "estampa da peça desejada"},
   {"id": "peca-bota", "mensagem": "quero usar bota", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "SAPATO", "cor": null}]}},
   {"id": "peca-bermuda", "mensagem": "de bermuda", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "SHORT", "cor": null}]}},
-  {"id": "peca-mochila", "mensagem": "vou de mochila", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "BOLSA", "cor": null}]}},
+  {"id": "peca-mochila", "mensagem": "vou de mochila", "esperado": {"tipo": "LOOK"}, "lacuna": "mochila não é cadastrável: não pode virar filtro de peça"},
 
   {"id": "evitar-vermelho", "mensagem": "nada de vermelho", "esperado": {"tipo": "LOOK", "evitarCores": [{"familia": "VERMELHO", "tom": null}]}},
   {"id": "evitar-tenis", "mensagem": "sem tênis hoje", "esperado": {"tipo": "LOOK", "evitarCategorias": ["TENIS"]}},
