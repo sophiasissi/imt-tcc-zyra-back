@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "avaliar:intencoes": "ts-node scripts/avaliar-intencoes.ts"
+    "avaliar:intencoes": "ts-node scripts/avaliar-intencoes.ts",
+    "reler:cores": "ts-node scripts/reler-cores.ts"
   },
   "lint-staged": {
     "*.{js,ts}": [
