@@ -18,6 +18,9 @@ export type AnaliseRoupa = {
   warmth: Aquecimento | null;
   material: Material | null;
   occasions: Ocasiao[];
+  // Segunda cor que a IA ve na peca (listras, xadrez, estampa), com o hex lido
+  // da propria foto. Null em peca de uma cor so.
+  secondaryColor?: { colorName: string; hex: string; colorAddSymbol: string } | null;
 };
 
 /** Resposta do /detect-color, ja com os nomes dos campos da Peca. */

@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import { CreatePecaDto } from './dto/create-peca.dto';
 import { UpdatePecaDto } from './dto/update-peca.dto';
-import { CorDaPeca, VisionService } from './vision.service';
+import { AnaliseRoupa, CorDaPeca, VisionService } from './vision.service';
 
 const EXTENSOES: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -16,6 +16,31 @@ const EXTENSOES: Record<string, string> = {
 
 function semCorSecundaria(cor: CorDaPeca): CorDaPeca {
   return { ...cor, corSecundariaNome: null, hexSecundario: null, colorAddSymbolSecundario: null };
+}
+
+/**
+ * Decide a cor secundaria gravada.
+ *
+ * A da analise da IA vem primeiro: nas 39 fotos reais de tests/eval da visao,
+ * ela achou 6 de 14 segundas cores, contra 0 da leitura por pixels, que fica
+ * so como reserva. Peca lisa nao tem segunda cor, e a IA repetir a cor
+ * principal nao conta.
+ */
+export function escolherCorSecundaria(cor: CorDaPeca, analise: AnaliseRoupa): CorDaPeca {
+  if (analise.pattern === 'LISO') return semCorSecundaria(cor);
+
+  const daIa = analise.secondaryColor;
+
+  if (daIa && daIa.colorAddSymbol !== cor.colorAddSymbol) {
+    return {
+      ...cor,
+      corSecundariaNome: daIa.colorName,
+      hexSecundario: daIa.hex,
+      colorAddSymbolSecundario: daIa.colorAddSymbol,
+    };
+  }
+
+  return cor;
 }
 
 @Injectable()
@@ -55,9 +80,7 @@ export class PecasService {
     try {
       const analise = await this.vision.analisarRoupa(foto.buffer, foto.mimetype);
 
-      // Peca lisa nao tem segunda cor. Quando a IA diz que e lisa, o que a
-      // leitura achou como secundaria e fundo da foto ou sombra.
-      const corFinal = analise.pattern === 'LISO' ? semCorSecundaria(cor) : cor;
+      const corFinal = escolherCorSecundaria(cor, analise);
 
       peca = await this.prisma.peca.create({
         data: {
