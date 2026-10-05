@@ -1,39 +1,17 @@
-// Espelha src/clothing_analysis/taxonomy.py da visão. Quando o model Peca
-// existir no Prisma, estes tipos passam a vir dos enums do @prisma/client.
+import { Aquecimento, Categoria, Estampa, Estilo, Material, Ocasiao } from '@prisma/client';
 
-export const CATEGORIAS = [
-  'CAMISETA',
-  'CAMISA',
-  'MOLETOM',
-  'JAQUETA',
-  'BLAZER',
-  'CALCA',
-  'SHORT',
-  'SAIA',
-  'VESTIDO',
-  'TENIS',
-  'SAPATO',
-] as const;
+// Os valores de peça vêm dos enums do Prisma, que espelham
+// src/clothing_analysis/taxonomy.py da visão.
+export const CATEGORIAS = Object.values(Categoria);
+export const ESTILOS = Object.values(Estilo);
+export const ESTAMPAS = Object.values(Estampa);
+export const OCASIOES = Object.values(Ocasiao);
+export const AQUECIMENTOS = Object.values(Aquecimento);
+export const MATERIAIS = Object.values(Material);
 
-export const ESTILOS = [
-  'CASUAL',
-  'SOCIAL',
-  'ESPORTIVO',
-  'STREETWEAR',
-  'ELEGANTE',
-  'BASICO',
-] as const;
+export { Aquecimento, Categoria, Estampa, Estilo, Material, Ocasiao };
 
-export const ESTAMPAS = ['LISO', 'ESTAMPADO', 'LISTRADO', 'XADREZ', 'LOGO'] as const;
-
-export const OCASIOES = ['DIA_A_DIA', 'TRABALHO', 'FESTA', 'ACADEMIA', 'PRAIA', 'CASA'] as const;
-
-export const AQUECIMENTOS = ['LEVE', 'MEDIO', 'QUENTE'] as const;
-
-// Só os materiais que a visão reconhece pela foto; o resto fica null.
-export const MATERIAIS = ['JEANS', 'COURO'] as const;
-
-// Não é guardado na peça: o motor deduz a formalidade da peça pelo estilo.
+// Não é guardado na peça: o motor deduz a formalidade pelo estilo.
 export const FORMALIDADES = ['BAIXA', 'MEDIA', 'ALTA'] as const;
 
 // Famílias do ColorADD, as mesmas que a visão devolve em colorAddSymbol.
@@ -52,12 +30,41 @@ export const FAMILIAS_COR = [
 
 export const TONS = ['CLARO', 'ESCURO'] as const;
 
-export type Categoria = (typeof CATEGORIAS)[number];
-export type Estilo = (typeof ESTILOS)[number];
-export type Estampa = (typeof ESTAMPAS)[number];
-export type Ocasiao = (typeof OCASIOES)[number];
-export type Aquecimento = (typeof AQUECIMENTOS)[number];
-export type Material = (typeof MATERIAIS)[number];
 export type Formalidade = (typeof FORMALIDADES)[number];
 export type FamiliaCor = (typeof FAMILIAS_COR)[number];
 export type Tom = (typeof TONS)[number];
+
+/**
+ * Lugar de cada categoria no look:
+ * superior + inferior + calçado, ou peça única (vestido) + calçado.
+ * Sobreposição (jaqueta, blazer) é opcional e vai por cima do superior.
+ */
+export type Papel = 'SUPERIOR' | 'SOBREPOSICAO' | 'INFERIOR' | 'PECA_UNICA' | 'CALCADO';
+
+export const PAPEL_DA_CATEGORIA: Record<Categoria, Papel> = {
+  CAMISETA: 'SUPERIOR',
+  CAMISA: 'SUPERIOR',
+  MOLETOM: 'SUPERIOR',
+  JAQUETA: 'SOBREPOSICAO',
+  BLAZER: 'SOBREPOSICAO',
+  CALCA: 'INFERIOR',
+  SHORT: 'INFERIOR',
+  SAIA: 'INFERIOR',
+  VESTIDO: 'PECA_UNICA',
+  TENIS: 'CALCADO',
+  SAPATO: 'CALCADO',
+};
+
+export const FORMALIDADE_DO_ESTILO: Record<Estilo, Formalidade> = {
+  ESPORTIVO: 'BAIXA',
+  STREETWEAR: 'BAIXA',
+  CASUAL: 'MEDIA',
+  BASICO: 'MEDIA',
+  SOCIAL: 'ALTA',
+  ELEGANTE: 'ALTA',
+};
+
+export const NIVEL_FORMALIDADE: Record<Formalidade, number> = { BAIXA: 0, MEDIA: 1, ALTA: 2 };
+
+/** Cores que combinam com qualquer outra (bege e marrom entram em castanho). */
+export const FAMILIAS_NEUTRAS: readonly FamiliaCor[] = ['PRETO', 'BRANCO', 'CINZA', 'CASTANHO'];
