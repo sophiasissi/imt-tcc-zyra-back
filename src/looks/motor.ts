@@ -1,4 +1,4 @@
-import { Categoria, Ocasiao, Peca } from '@prisma/client';
+import { Categoria, Peca } from '@prisma/client';
 
 import {
   CorPeca,
@@ -8,7 +8,8 @@ import {
   distanciaAoPedido,
   eNeutra,
 } from './cor';
-import { Intencao, PecaDesejada } from './interpretar-pedido';
+import { Intencao, ParteDoLook, PecaDesejada } from './interpretar-pedido';
+import { compatibilidade, notaDeOcasiao, SUGESTAO_DE_CADASTRO } from './ocasioes';
 import {
   Formalidade,
   FORMALIDADE_DO_ESTILO,
@@ -51,8 +52,14 @@ export type ResultadoMotor =
   | { status: 'LOOK'; pecas: PecaNoLook[]; descricao: string; avisos: string[] };
 
 export type OpcoesMotor = {
-  /** Peças do último look mostrado: penalizadas para "quero outro" trazer algo diferente. */
+  /**
+   * Peças do último look mostrado. Em "quero outro", são penalizadas para vir
+   * algo diferente; em "troca o tênis" (intencao.trocar), as das outras partes
+   * ficam fixas e só a parte pedida muda.
+   */
   pecasAnteriores?: string[];
+  /** Peças dos últimos looks da conversa: levemente penalizadas, para variar. */
+  pecasRecentes?: string[];
   /** Fonte de aleatoriedade, injetável nos testes. */
   aleatorio?: () => number;
 };
@@ -80,20 +87,27 @@ const NOME_OCASIAO: Record<string, string> = {
   CASA: 'ficar em casa',
 };
 
-const NOME_PAPEL: Record<Papel, string> = {
-  SUPERIOR: 'peça de cima',
-  SOBREPOSICAO: 'jaqueta ou blazer',
-  INFERIOR: 'peça de baixo',
-  PECA_UNICA: 'vestido',
-  CALCADO: 'calçado',
+// Papéis do look anterior que cada parte de "trocar" substitui. Vestido conta
+// como parte de cima e de baixo.
+const PAPEIS_DA_PARTE: Record<ParteDoLook, Papel[]> = {
+  CIMA: ['SUPERIOR', 'PECA_UNICA'],
+  BAIXO: ['INFERIOR', 'PECA_UNICA'],
+  CALCADO: ['CALCADO'],
+  CAMADA: ['SOBREPOSICAO'],
 };
 
 // Quantas peças de cada papel entram na busca. Com um armário grande, testar
 // todas as combinações ficaria lento; as melhores individualmente bastam.
 const CANDIDATOS_POR_PAPEL = 12;
 
-// Os looks com nota até essa distância da melhor entram no sorteio.
-const MARGEM_SORTEIO = 1.5;
+// Os looks com nota até essa distância da melhor entram no sorteio, até esse limite.
+const MARGEM_SORTEIO = 2;
+const MAXIMO_FINALISTAS = 8;
+
+// Desempate aleatório entre peças de nota parecida. Muitas peças empatam (ex.:
+// várias camisetas de dia a dia com logo) e, sem isso, o motor escolhia sempre
+// as primeiras da lista.
+const VARIACAO_ALEATORIA = 1;
 
 type PecaRica = PecaMotor & {
   papel: Papel;
@@ -157,8 +171,30 @@ function juntar(itens: string[]) {
   return itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens.at(-1)}` : itens[0];
 }
 
+const CATEGORIAS_FEMININAS: Categoria[] = ['CAMISETA', 'CAMISA', 'JAQUETA', 'CALCA', 'SAIA'];
+
+const FEMININO: Record<string, string> = {
+  Preto: 'Preta',
+  Branco: 'Branca',
+  Vermelho: 'Vermelha',
+  Amarelo: 'Amarela',
+  Roxo: 'Roxa',
+  Castanho: 'Castanha',
+  Claro: 'Clara',
+  Escuro: 'Escura',
+};
+
+/** "Calça Preta", "Jaqueta Vermelha Clara"; verde, azul, laranja e cinza não mudam. */
+function corConcordando(corNome: string, categoria: Categoria) {
+  if (!CATEGORIAS_FEMININAS.includes(categoria)) return corNome;
+  return corNome
+    .split(' ')
+    .map((palavra) => FEMININO[palavra] ?? palavra)
+    .join(' ');
+}
+
 function descreverPeca(peca: PecaMotor) {
-  return `${NOME_CATEGORIA[peca.categoria]} ${peca.corNome}`;
+  return `${NOME_CATEGORIA[peca.categoria]} ${corConcordando(peca.corNome, peca.categoria)}`;
 }
 
 /**
@@ -196,29 +232,46 @@ function resolverPedido(pedido: PecaDesejada, pecas: PecaRica[], avisos: string[
   return [];
 }
 
-// Ocasiões informais (dia a dia, praia, casa, academia) e formais (trabalho,
-// festa). Peça marcada para outra ocasião do mesmo grupo é uma boa aposta;
-// do grupo oposto, é uma escolha ruim (sapato social na praia, moletom na festa).
-const INFORMAIS: Ocasiao[] = ['DIA_A_DIA', 'PRAIA', 'CASA', 'ACADEMIA'];
+/**
+ * Mensagem quando não dá para montar a base do look. Se a ocasião é que
+ * barrou as peças, diz o que falta e o que cadastrar; senão, foram as
+ * restrições do próprio pedido.
+ */
+function mensagemSemBase(intencao: Intencao, pecas: PecaRica[]) {
+  const ocasiao = intencao.ocasiao;
+  const permitida = (p: PecaRica) => compatibilidade(p, ocasiao) !== 'PROIBIDA';
+  const temVestido = pecas.some((p) => p.papel === 'PECA_UNICA' && permitida(p));
+  const faltam = [
+    !temVestido && !pecas.some((p) => p.papel === 'SUPERIOR' && permitida(p)) && 'peças de cima',
+    !temVestido && !pecas.some((p) => p.papel === 'INFERIOR' && permitida(p)) && 'peças de baixo',
+  ].filter((falta): falta is string => Boolean(falta));
 
-function afinidade(pedida: Ocasiao, daPeca: Ocasiao) {
-  if (pedida === daPeca) return 2;
-  if (daPeca === 'DIA_A_DIA' && pedida !== 'ACADEMIA') return pedida === 'FESTA' ? 0 : 0.5;
-  if (INFORMAIS.includes(pedida) === INFORMAIS.includes(daPeca)) return 0.5;
-  return -2;
-}
+  const faltamPelaOcasiao =
+    ocasiao &&
+    faltam.length &&
+    faltam.some((falta) =>
+      pecas.some((p) =>
+        falta === 'peças de cima' ? p.papel === 'SUPERIOR' : p.papel === 'INFERIOR',
+      ),
+    );
 
-/** Quão bem a peça serve para a ocasião pedida (peça sem ocasião: neutra). */
-function notaDeOcasiao(peca: PecaRica, ocasiao: Ocasiao) {
-  if (!peca.ocasioes.length) return 0;
-  return Math.max(...peca.ocasioes.map((daPeca) => afinidade(ocasiao, daPeca)));
+  if (ocasiao && faltamPelaOcasiao) {
+    return `Não encontrei ${juntar(faltam)} para ${NOME_OCASIAO[ocasiao]} no seu armário. ${SUGESTAO_DE_CADASTRO[ocasiao]}`;
+  }
+
+  return 'Com essas restrições não sobrou peça de cima e de baixo no seu armário. Tente pedir de outro jeito.';
 }
 
 /** Nota de uma peça sozinha, para escolher os candidatos de cada papel. */
-function notaDaPeca(peca: PecaRica, intencao: Intencao, anteriores: Set<string>) {
+function notaDaPeca(
+  peca: PecaRica,
+  intencao: Intencao,
+  anteriores: Set<string>,
+  recentes: Set<string> = new Set(),
+) {
   let nota = 0;
 
-  if (intencao.ocasiao) nota += notaDeOcasiao(peca, intencao.ocasiao);
+  nota += notaDeOcasiao(peca, intencao.ocasiao);
   if (intencao.estilo && peca.estilo === intencao.estilo) nota += 1.5;
   if (intencao.formalidade) {
     nota -=
@@ -230,6 +283,7 @@ function notaDaPeca(peca: PecaRica, intencao: Intencao, anteriores: Set<string>)
   }
   if (intencao.paletaNeutra && !peca.neutra) nota -= 10;
   if (anteriores.has(peca.id)) nota -= 2;
+  else if (recentes.has(peca.id)) nota -= 1;
 
   return nota;
 }
@@ -278,47 +332,62 @@ export function montarLook(
 
   const aleatorio = opcoes.aleatorio ?? Math.random;
   const anteriores = new Set(opcoes.pecasAnteriores ?? []);
+  const recentes = new Set(opcoes.pecasRecentes ?? []);
   const avisos: string[] = [];
 
+  // Nota de cada peça com um pequeno desempate aleatório, sorteado uma vez por pedido.
+  const notas = new Map<string, number>();
+  const nota = (p: PecaRica) => {
+    if (!notas.has(p.id)) {
+      notas.set(
+        p.id,
+        notaDaPeca(p, intencao, anteriores, recentes) + aleatorio() * VARIACAO_ALEATORIA,
+      );
+    }
+    return notas.get(p.id)!;
+  };
+  const todasAsPecas = pecasDoArmario.map(enriquecer);
+
+  // "Troca o tênis": o resto do look anterior fica fixo e a peça trocada sai.
+  const trocados = new Set(intencao.trocar.flatMap((parte) => PAPEIS_DA_PARTE[parte]));
+  const doLookAnterior = todasAsPecas.filter((p) => anteriores.has(p.id));
+  const fixas = trocados.size ? doLookAnterior.filter((p) => !trocados.has(p.papel)) : [];
+  const trocadas = new Set(
+    trocados.size ? doLookAnterior.filter((p) => trocados.has(p.papel)).map((p) => p.id) : [],
+  );
+
   // Restrições que o usuário pediu explicitamente: removem a peça.
-  let pecas = pecasDoArmario
-    .map(enriquecer)
-    .filter(
-      (p) =>
-        !intencao.evitarCategorias.includes(p.categoria) &&
-        !intencao.evitarCores.some((cor) => corBateComPedido(cor, p.cor)),
-    );
+  let pecas = todasAsPecas.filter(
+    (p) =>
+      !trocadas.has(p.id) &&
+      !intencao.evitarCategorias.includes(p.categoria) &&
+      !intencao.evitarCores.some((cor) => corBateComPedido(cor, p.cor)),
+  );
 
   // Calor: nada de peça quente. Sem isso, o motor poderia sugerir moletom a 32 graus.
   if (intencao.aquecimento === 'LEVE') {
     pecas = pecas.filter((p) => p.aquecimento !== 'QUENTE');
   }
 
-  // "Quero usar X": cada pedido vira uma lista de peças aceitas.
-  const obrigatorias = intencao.incluir
-    .map((pedido) => resolverPedido(pedido, pecas, avisos))
-    .filter((lista) => lista.length > 0);
+  // "Quero usar X" e as peças mantidas do look anterior entram mesmo fora da
+  // ocasião: foi o usuário quem escolheu.
+  const obrigatorias = [
+    ...intencao.incluir.map((pedido) => resolverPedido(pedido, pecas, avisos)),
+    ...fixas.map((p) => [p]),
+  ].filter((lista) => lista.length > 0);
+  const pedidas = new Set(obrigatorias.flat());
 
-  const semPecaDaOcasiao: string[] = [];
+  // Peça proibida para a ocasião nunca entra (calça jeans na academia, chinelo na festa).
+  const permitidas = pecas.filter(
+    (p) => pedidas.has(p) || compatibilidade(p, intencao.ocasiao) !== 'PROIBIDA',
+  );
 
   const porPapel = (papel: Papel) => {
-    const todas = pecas.filter((p) => p.papel === papel);
-    const naOcasiao = intencao.ocasiao
-      ? todas.filter((p) => !p.ocasioes.length || p.ocasioes.includes(intencao.ocasiao!))
-      : todas;
-    const escolhidas = naOcasiao.length ? naOcasiao : todas;
-
-    if (intencao.ocasiao && todas.length && !naOcasiao.length && papel !== 'SOBREPOSICAO') {
-      semPecaDaOcasiao.push(NOME_PAPEL[papel]);
-    }
+    const daPapel = permitidas.filter((p) => p.papel === papel);
+    const melhores = [...daPapel].sort((a, b) => nota(b) - nota(a)).slice(0, CANDIDATOS_POR_PAPEL);
 
     // As peças pedidas sempre entram na busca, mesmo fora do corte por nota.
-    const pedidas = obrigatorias.flat().filter((p) => p.papel === papel);
-    const melhores = [...escolhidas]
-      .sort((a, b) => notaDaPeca(b, intencao, anteriores) - notaDaPeca(a, intencao, anteriores))
-      .slice(0, CANDIDATOS_POR_PAPEL);
-
-    return [...new Set([...pedidas, ...melhores])];
+    return [...new Set([...daPapel.filter((p) => pedidas.has(p)), ...melhores])];
   };
 
   const superiores = porPapel('SUPERIOR');
@@ -327,38 +396,37 @@ export function montarLook(
   const calcados = porPapel('CALCADO');
   const sobreposicoes = porPapel('SOBREPOSICAO');
 
-  if (intencao.ocasiao && semPecaDaOcasiao.length) {
-    avisos.push(
-      `Não achei ${juntar(semPecaDaOcasiao)} para ${NOME_OCASIAO[intencao.ocasiao]}; usei as peças mais próximas.`,
-    );
-  }
-
   const bases: PecaRica[][] = [
     ...superiores.flatMap((s) => inferiores.map((i) => [s, i])),
     ...vestidos.map((v) => [v]),
   ];
 
   if (!bases.length) {
-    return {
-      status: 'SEM_LOOK',
-      mensagem:
-        'Com essas restrições não sobrou peça de cima e de baixo no seu armário. Tente pedir de outro jeito.',
-      avisos,
-    };
+    return { status: 'SEM_LOOK', mensagem: mensagemSemBase(intencao, pecas), avisos };
   }
 
   if (!calcados.length) {
+    const temCalcado = todasAsPecas.some((p) => p.papel === 'CALCADO');
     avisos.push(
-      pecasDoArmario.some((p) => PAPEL_DA_CATEGORIA[p.categoria] === 'CALCADO')
-        ? 'Nenhum calçado seu combina com esse pedido; o look saiu sem calçado.'
-        : 'Você ainda não cadastrou calçados; cadastre para completar seus looks.',
+      !temCalcado
+        ? 'Você ainda não cadastrou calçados; cadastre para completar seus looks.'
+        : intencao.ocasiao && pecas.some((p) => p.papel === 'CALCADO')
+          ? `Não encontrei calçado para ${NOME_OCASIAO[intencao.ocasiao]} no seu armário; o look saiu sem calçado.`
+          : 'Nenhum calçado seu combina com esse pedido; o look saiu sem calçado.',
     );
   }
 
   // Frio pede uma camada a mais; no calor ela já foi filtrada.
   const pedeSobreposicao = intencao.aquecimento === 'QUENTE';
   const opcoesDeCalcado: (PecaRica | null)[] = calcados.length ? calcados : [null];
-  const opcoesDeSobreposicao: (PecaRica | null)[] = [null, ...sobreposicoes];
+  // Jaqueta ou blazer só entram quando fazem sentido: frio, trabalho ou pedido
+  // formal (ou quando o usuário pediu a peça). Fora disso, um casaco sem motivo
+  // só deixa o look estranho.
+  const camadaFazSentido =
+    pedeSobreposicao || intencao.formalidade === 'ALTA' || intencao.ocasiao === 'TRABALHO';
+  const opcoesDeSobreposicao: (PecaRica | null)[] = camadaFazSentido
+    ? [null, ...sobreposicoes]
+    : [null, ...sobreposicoes.filter((p) => pedidas.has(p))];
 
   const looks: { pecas: PecaRica[]; nota: number }[] = [];
 
@@ -370,19 +438,17 @@ export function montarLook(
         // Cada "quero usar X" precisa estar no look.
         if (!obrigatorias.every((lista) => lista.some((p) => look.includes(p)))) continue;
 
-        let nota =
-          look.reduce((soma, p) => soma + notaDaPeca(p, intencao, anteriores), 0) +
+        // A camada não soma a própria nota: se somasse, o look com jaqueta
+        // sempre ganharia. Ela só ganha pontos quando aquece um look sem moletom.
+        const comMoletom = base.some((p) => p.categoria === 'MOLETOM');
+        let notaDoLook =
+          [...base, calcado].reduce((soma, p) => soma + (p ? nota(p) : 0), 0) +
           notaDeHarmonia(look);
 
-        const aquece = sobreposicao || base.some((p) => p.categoria === 'MOLETOM');
-        if (pedeSobreposicao && !aquece) nota -= 3;
+        if (pedeSobreposicao && !sobreposicao && !comMoletom) notaDoLook -= 3;
+        if (pedeSobreposicao && sobreposicao && !comMoletom) notaDoLook += 1;
 
-        // Jaqueta ou blazer só quando faz sentido: frio, trabalho ou pedido formal.
-        const camadaFazSentido =
-          pedeSobreposicao || intencao.formalidade === 'ALTA' || intencao.ocasiao === 'TRABALHO';
-        if (sobreposicao && !camadaFazSentido) nota -= 2.5;
-
-        looks.push({ pecas: look, nota });
+        looks.push({ pecas: look, nota: notaDoLook });
       }
     }
   }
@@ -397,7 +463,9 @@ export function montarLook(
 
   // Sorteia entre os melhores, para "quero outro" não repetir sempre o mesmo.
   looks.sort((a, b) => b.nota - a.nota);
-  const finalistas = looks.filter((l) => l.nota >= looks[0].nota - MARGEM_SORTEIO).slice(0, 5);
+  const finalistas = looks
+    .filter((l) => l.nota >= looks[0].nota - MARGEM_SORTEIO)
+    .slice(0, MAXIMO_FINALISTAS);
   const escolhido = finalistas[Math.floor(aleatorio() * finalistas.length)];
 
   const ordem: Papel[] = ['SUPERIOR', 'PECA_UNICA', 'SOBREPOSICAO', 'INFERIOR', 'CALCADO'];

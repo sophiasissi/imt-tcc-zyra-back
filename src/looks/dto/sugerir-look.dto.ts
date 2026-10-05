@@ -40,4 +40,11 @@ export class SugerirLookDto {
   @ArrayMaxSize(10)
   @IsUUID('4', { each: true })
   pecasAnteriores?: string[];
+
+  /** Peças dos últimos looks da conversa, para o motor variar as sugestões. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @IsUUID('4', { each: true })
+  pecasRecentes?: string[];
 }

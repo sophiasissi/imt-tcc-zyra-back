@@ -73,7 +73,10 @@ export class LooksService {
       return { tipo: 'FORA_DE_ESCOPO', mensagem: FORA_DE_ESCOPO };
     }
 
-    const resultado = montarLook(pecas, intencao, { pecasAnteriores: dto.pecasAnteriores });
+    const resultado = montarLook(pecas, intencao, {
+      pecasAnteriores: dto.pecasAnteriores,
+      pecasRecentes: dto.pecasRecentes,
+    });
 
     if (resultado.status !== 'LOOK') {
       return resultado.status === 'SEM_LOOK'

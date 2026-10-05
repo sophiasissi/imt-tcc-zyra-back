@@ -32,6 +32,10 @@ export type PecaDesejada = {
 
 export type TipoIntencao = 'LOOK' | 'ESCLARECER' | 'FORA_DE_ESCOPO';
 
+/** Partes do look anterior que o usuário pediu para trocar ("troca o tênis"). */
+export const PARTES_DO_LOOK = ['CIMA', 'BAIXO', 'CALCADO', 'CAMADA'] as const;
+export type ParteDoLook = (typeof PARTES_DO_LOOK)[number];
+
 /**
  * O que o motor de looks precisa saber para buscar peças no closet.
  * A IA só interpreta o pedido; quem escolhe as peças são as regras do motor.
@@ -48,6 +52,8 @@ export type Intencao = {
   evitarCores: Cor[];
   pergunta: string | null;
   naoMapeado: string[];
+  /** Vazio: look novo. Com partes: mantém o resto do look anterior e troca só elas. */
+  trocar: ParteDoLook[];
 };
 
 export type ResultadoInterpretacao = {
@@ -106,6 +112,10 @@ Campos:
 - cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}
   opcional. Rosa = VERMELHO CLARO, marrom = CASTANHO, marinho = AZUL ESCURO,
   vinho = VERMELHO ESCURO.
+- trocar: quando o usuário pede para mudar só parte do look anterior ("troca o
+  tênis", "outra calça", "muda a parte de cima"), as partes a trocar: CIMA, BAIXO,
+  CALCADO ou CAMADA (jaqueta, blazer). Nesse caso, repita a ocasião, o estilo e o
+  clima que já estavam na conversa. Para um look novo ou "quero outro", deixe vazio.
 - naoMapeado: termos curtos (até 3 palavras) que mudariam o look e não couberam em
   nenhum campo. Não repita o que já virou campo nem registre datas. Normalmente vazio.
 `.trim();
@@ -140,6 +150,7 @@ const INTENCAO_SCHEMA = {
     'evitarCores',
     'pergunta',
     'naoMapeado',
+    'trocar',
   ],
   properties: {
     tipo: { type: 'string', enum: ['LOOK', 'ESCLARECER', 'FORA_DE_ESCOPO'] },
@@ -165,6 +176,7 @@ const INTENCAO_SCHEMA = {
     evitarCores: { type: 'array', items: COR_SCHEMA },
     pergunta: { type: ['string', 'null'] },
     naoMapeado: { type: 'array', items: { type: 'string' } },
+    trocar: { type: 'array', items: { type: 'string', enum: [...PARTES_DO_LOOK] } },
   },
 };
 
@@ -199,6 +211,7 @@ export function ajustarIntencao(intencao: Intencao): Intencao {
     ...intencao,
     tipo,
     pergunta: tipo === 'ESCLARECER' ? intencao.pergunta : null,
+    trocar: intencao.trocar ?? [],
     // "Preto claro" e "branco escuro" não existem no ColorADD.
     incluir: intencao.incluir.map((peca) => ({ ...peca, cor: semTomSeNeutra(peca.cor) })),
     evitarCores: intencao.evitarCores.map((cor) => semTomSeNeutra(cor)!),
