@@ -4,8 +4,8 @@ import { IsHexColor, IsOptional, IsString, MaxLength } from 'class-validator';
  * Campos de texto que acompanham a foto no multipart.
  *
  * A cor vem da tela de captura (/detect-color, gratuito). Se o app nao mandar
- * a cor completa, o back le a cor da foto sozinho. O resto das
- * caracteristicas vem da analise da peca.
+ * a cor principal completa, o back le as cores da foto sozinho. A secundaria
+ * so vem em peca de duas cores. O resto das caracteristicas vem da analise.
  */
 export class CreatePecaDto {
   @IsOptional()
@@ -21,4 +21,18 @@ export class CreatePecaDto {
   @IsString()
   @MaxLength(60)
   colorAddSymbol?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  corSecundariaNome?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  hexSecundario?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  colorAddSymbolSecundario?: string;
 }

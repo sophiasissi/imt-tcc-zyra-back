@@ -14,6 +14,10 @@ const EXTENSOES: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+function semCorSecundaria(cor: CorDaPeca): CorDaPeca {
+  return { ...cor, corSecundariaNome: null, hexSecundario: null, colorAddSymbolSecundario: null };
+}
+
 @Injectable()
 export class PecasService {
   constructor(
@@ -51,6 +55,10 @@ export class PecasService {
     try {
       const analise = await this.vision.analisarRoupa(foto.buffer, foto.mimetype);
 
+      // Peca lisa nao tem segunda cor. Quando a IA diz que e lisa, o que a
+      // leitura achou como secundaria e fundo da foto ou sombra.
+      const corFinal = analise.pattern === 'LISO' ? semCorSecundaria(cor) : cor;
+
       peca = await this.prisma.peca.create({
         data: {
           usuarioId: usuario.id,
@@ -61,7 +69,7 @@ export class PecasService {
           ocasioes: analise.occasions,
           aquecimento: analise.warmth,
           material: analise.material,
-          ...cor,
+          ...corFinal,
         },
       });
     } catch (error) {
@@ -107,12 +115,27 @@ export class PecasService {
     return { message: 'Peça removida do seu closet.' };
   }
 
+  /**
+   * Usa a cor que o app leu na captura. Sem a principal completa, le as duas
+   * cores da foto. A secundaria do app so vale se vier completa.
+   */
   private async resolverCor(foto: Express.Multer.File, dto: CreatePecaDto): Promise<CorDaPeca> {
-    if (dto.corNome && dto.hex && dto.colorAddSymbol) {
-      return { corNome: dto.corNome, hex: dto.hex, colorAddSymbol: dto.colorAddSymbol };
+    if (!dto.corNome || !dto.hex || !dto.colorAddSymbol) {
+      return this.vision.detectarCor(foto.buffer, foto.mimetype);
     }
 
-    return this.vision.detectarCor(foto.buffer, foto.mimetype);
+    const temSecundaria = Boolean(
+      dto.corSecundariaNome && dto.hexSecundario && dto.colorAddSymbolSecundario,
+    );
+
+    return {
+      corNome: dto.corNome,
+      hex: dto.hex,
+      colorAddSymbol: dto.colorAddSymbol,
+      corSecundariaNome: temSecundaria ? dto.corSecundariaNome! : null,
+      hexSecundario: temSecundaria ? dto.hexSecundario! : null,
+      colorAddSymbolSecundario: temSecundaria ? dto.colorAddSymbolSecundario! : null,
+    };
   }
 
   private async findUsuario(cognitoSub: string) {

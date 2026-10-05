@@ -25,7 +25,13 @@ export type CorDaPeca = {
   corNome: string;
   hex: string;
   colorAddSymbol: string;
+  // Segunda cor de pecas listradas ou estampadas; null em peca de uma cor so.
+  corSecundariaNome: string | null;
+  hexSecundario: string | null;
+  colorAddSymbolSecundario: string | null;
 };
+
+type CorLida = { colorName?: string; hex?: string; colorAddSymbol?: string };
 
 // A analise pela OpenAI leva de 5 a 16 segundos. 45s deixa folga sem prender
 // a pessoa indefinidamente se o servico travar.
@@ -67,7 +73,7 @@ export class VisionService {
     // taxonomia, como bone e chapeu.
     if (!analise.category) {
       throw new UnprocessableEntityException(
-        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
+        'Não reconhecemos o tipo desta peça. Dá para cadastrar roupas de cima e de baixo, vestidos, macacões e calçados; bolsas, mochilas, bonés e chapéus não entram no armário.',
       );
     }
 
@@ -79,25 +85,35 @@ export class VisionService {
    * se o /detect-color falhou na tela da camera — porque a cor e obrigatoria.
    */
   async detectarCor(imagem: Buffer, contentType: string): Promise<CorDaPeca> {
+    // area=peca: cor que mais ocupa a peca, e nao so o ponto da mira, mais a
+    // cor secundaria.
     const response = await this.enviarImagem(
-      '/detect-color',
+      '/detect-color?area=peca',
       imagem,
       contentType,
       TEMPO_LIMITE_COR_MS,
     );
 
-    const cor = (await response.json()) as {
-      colorName?: string;
-      hex?: string;
-      colorAddSymbol?: string;
-    };
+    const cor = (await response.json()) as CorLida & { secondary?: CorLida | null };
 
     if (!cor.colorName || !cor.hex || !cor.colorAddSymbol) {
       this.logger.error('Servico de visao devolveu uma cor incompleta');
       throw this.indisponivel();
     }
 
-    return { corNome: cor.colorName, hex: cor.hex, colorAddSymbol: cor.colorAddSymbol };
+    const secundaria = cor.secondary;
+    const temSecundaria = Boolean(
+      secundaria?.colorName && secundaria.hex && secundaria.colorAddSymbol,
+    );
+
+    return {
+      corNome: cor.colorName,
+      hex: cor.hex,
+      colorAddSymbol: cor.colorAddSymbol,
+      corSecundariaNome: temSecundaria ? secundaria!.colorName! : null,
+      hexSecundario: temSecundaria ? secundaria!.hex! : null,
+      colorAddSymbolSecundario: temSecundaria ? secundaria!.colorAddSymbol! : null,
+    };
   }
 
   private async enviarImagem(
