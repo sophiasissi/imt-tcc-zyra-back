@@ -4,7 +4,7 @@
   {"id": "ocasiao-academia", "mensagem": "vou pra academia agora, o que eu visto?", "esperado": {"tipo": "LOOK", "ocasiao": "ACADEMIA"}},
   {"id": "ocasiao-praia", "mensagem": "vou pra praia no fim de semana", "esperado": {"tipo": "LOOK", "ocasiao": "PRAIA"}},
   {"id": "ocasiao-festa", "mensagem": "tenho uma festa de aniversário hoje", "esperado": {"tipo": "LOOK", "ocasiao": "FESTA"}},
-  {"id": "ocasiao-casamento", "mensagem": "vou num casamento sábado", "esperado": {"tipo": "LOOK", "ocasiao": "FESTA", "formalidade": "ALTA"}},
+  {"id": "ocasiao-casamento", "mensagem": "vou num casamento sábado", "esperado": {"tipo": "LOOK", "ocasiao": "EVENTO_FORMAL", "formalidade": "ALTA"}},
   {"id": "ocasiao-casa", "mensagem": "vou ficar em casa o dia todo, algo confortável", "esperado": {"tipo": "LOOK", "ocasiao": "CASA", "formalidade": "*"}},
   {"id": "ocasiao-balada", "mensagem": "look pra balada", "esperado": {"tipo": "LOOK", "ocasiao": "FESTA", "formalidade": "*"}},
   {"id": "ocasiao-reuniao", "mensagem": "tenho uma reunião importante com cliente", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO", "formalidade": "ALTA"}},
@@ -74,5 +74,15 @@
   {"id": "girias-churrasco", "mensagem": "churrasco na casa de um amigo", "esperado": {"tipo": "LOOK", "ocasiao": "DIA_A_DIA"}, "lacuna": "churrasco fica entre DIA_A_DIA e FESTA"},
   {"id": "girias-trampo", "mensagem": "look pro trampo", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO"}},
   {"id": "girias-encontro", "mensagem": "tenho um date hoje à noite", "esperado": {"tipo": "LOOK", "ocasiao": "*", "formalidade": "*"}},
-  {"id": "girias-entrevista", "mensagem": "entrevista de emprego amanhã", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO", "formalidade": "ALTA"}}
+  {"id": "girias-entrevista", "mensagem": "entrevista de emprego amanhã", "esperado": {"tipo": "LOOK", "ocasiao": "TRABALHO", "formalidade": "ALTA"}},
+  {"id": "taxo-chinelo", "mensagem": "vou de chinelo", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "SANDALIA", "cor": null, "material": null}]}},
+  {"id": "taxo-polo", "mensagem": "quero usar minha polo azul marinho", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "POLO", "cor": {"familia": "AZUL", "tom": "ESCURO"}, "material": null}]}},
+  {"id": "taxo-macaquinho", "mensagem": "com o macaquinho jeans", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "MACACAO", "cor": null, "material": "JEANS"}]}},
+  {"id": "taxo-sobretudo", "mensagem": "tá muito frio, quero usar meu sobretudo", "esperado": {"tipo": "LOOK", "aquecimento": "QUENTE", "incluir": [{"categoria": "CASACO", "cor": null, "material": null}]}},
+  {"id": "taxo-cardiga", "mensagem": "com o cardigã de tricô", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CARDIGA", "cor": null, "material": "TRICO"}]}},
+  {"id": "taxo-bota-camurca", "mensagem": "com a bota de camurça marrom", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "BOTA", "cor": {"familia": "CASTANHO", "tom": null}, "material": "CAMURCA"}]}},
+  {"id": "taxo-esporte-fino", "mensagem": "o convite pede esporte fino", "esperado": {"tipo": "LOOK", "estilo": "ESPORTE_FINO", "ocasiao": "*", "formalidade": "*"}},
+  {"id": "taxo-paete", "mensagem": "quero usar a saia de paetê na festa", "esperado": {"tipo": "LOOK", "ocasiao": "FESTA", "incluir": [{"categoria": "SAIA", "cor": null, "material": "PAETE"}]}},
+  {"id": "taxo-regata", "mensagem": "tá calor, vou de regata", "esperado": {"tipo": "LOOK", "aquecimento": "LEVE", "incluir": [{"categoria": "REGATA", "cor": null, "material": null}]}},
+  {"id": "taxo-formatura", "mensagem": "minha formatura é sábado", "esperado": {"tipo": "LOOK", "ocasiao": "EVENTO_FORMAL", "formalidade": "ALTA"}}
 ]

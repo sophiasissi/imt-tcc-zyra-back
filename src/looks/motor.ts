@@ -1,4 +1,4 @@
-import { Categoria, Ocasiao, Peca } from '@prisma/client';
+import { Categoria, Material, Ocasiao, Peca } from '@prisma/client';
 
 import {
   CorPeca,
@@ -59,32 +59,51 @@ export type OpcoesMotor = {
 
 const NOME_CATEGORIA: Record<Categoria, string> = {
   CAMISETA: 'Camiseta',
+  POLO: 'Polo',
+  REGATA: 'Regata',
   CAMISA: 'Camisa',
   MOLETOM: 'Moletom',
+  CARDIGA: 'Cardigã',
   JAQUETA: 'Jaqueta',
+  CASACO: 'Casaco',
   BLAZER: 'Blazer',
+  COLETE: 'Colete',
   CALCA: 'Calça',
   SHORT: 'Short',
   SAIA: 'Saia',
   VESTIDO: 'Vestido',
+  MACACAO: 'Macacão',
   TENIS: 'Tênis',
   SAPATO: 'Sapato',
+  BOTA: 'Bota',
+  SANDALIA: 'Sandália',
 };
 
-const NOME_OCASIAO: Record<string, string> = {
+const NOME_OCASIAO: Record<Ocasiao, string> = {
   DIA_A_DIA: 'o dia a dia',
   TRABALHO: 'trabalho',
   FESTA: 'festa',
+  EVENTO_FORMAL: 'evento formal',
   ACADEMIA: 'academia',
   PRAIA: 'praia',
   CASA: 'ficar em casa',
 };
 
+const NOME_MATERIAL: Record<Material, string> = {
+  JEANS: 'jeans',
+  COURO: 'de couro',
+  VERNIZ: 'de verniz',
+  CAMURCA: 'de camurça',
+  TRICO: 'de tricô',
+  PELO: 'de pelo',
+  PAETE: 'de paetê',
+};
+
 const NOME_PAPEL: Record<Papel, string> = {
   SUPERIOR: 'peça de cima',
-  SOBREPOSICAO: 'jaqueta ou blazer',
+  SOBREPOSICAO: 'peça para ir por cima (jaqueta, casaco, blazer, cardigã ou colete)',
   INFERIOR: 'peça de baixo',
-  PECA_UNICA: 'vestido',
+  PECA_UNICA: 'vestido ou macacão',
   CALCADO: 'calçado',
 };
 
@@ -144,7 +163,7 @@ export function mensagemPoucasPecas(faltamSuperiores: number, faltamInferiores: 
 
 function descreverPedido(pedido: PecaDesejada) {
   const partes = [pedido.categoria ? NOME_CATEGORIA[pedido.categoria].toLowerCase() : 'peça'];
-  if (pedido.material) partes.push(pedido.material === 'JEANS' ? 'jeans' : 'de couro');
+  if (pedido.material) partes.push(NOME_MATERIAL[pedido.material]);
   if (pedido.cor) {
     partes.push(
       `${pedido.cor.familia.toLowerCase()}${pedido.cor.tom ? ` ${pedido.cor.tom.toLowerCase()}` : ''}`,
@@ -197,13 +216,16 @@ function resolverPedido(pedido: PecaDesejada, pecas: PecaRica[], avisos: string[
 }
 
 // Ocasiões informais (dia a dia, praia, casa, academia) e formais (trabalho,
-// festa). Peça marcada para outra ocasião do mesmo grupo é uma boa aposta;
-// do grupo oposto, é uma escolha ruim (sapato social na praia, moletom na festa).
+// festa, evento formal). Peça marcada para outra ocasião do mesmo grupo é uma
+// boa aposta; do grupo oposto, é uma escolha ruim (sapato social na praia,
+// moletom na festa).
 const INFORMAIS: Ocasiao[] = ['DIA_A_DIA', 'PRAIA', 'CASA', 'ACADEMIA'];
 
 function afinidade(pedida: Ocasiao, daPeca: Ocasiao) {
   if (pedida === daPeca) return 2;
-  if (daPeca === 'DIA_A_DIA' && pedida !== 'ACADEMIA') return pedida === 'FESTA' ? 0 : 0.5;
+  if (daPeca === 'DIA_A_DIA' && pedida !== 'ACADEMIA') {
+    return pedida === 'FESTA' || pedida === 'EVENTO_FORMAL' ? 0 : 0.5;
+  }
   if (INFORMAIS.includes(pedida) === INFORMAIS.includes(daPeca)) return 0.5;
   return -2;
 }

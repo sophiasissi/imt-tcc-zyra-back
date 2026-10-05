@@ -280,3 +280,43 @@ describe('harmonia', () => {
     assert.ok(new Set(fortes.map((p) => p.colorAddSymbol)).size <= 2);
   });
 });
+
+describe('categorias da taxonomia ampliada', () => {
+  it('monta macacão + calçado, como vestido', () => {
+    const macacao = peca('MACACAO', 'Azul', 'COLORADD_AZUL', '#3B5B85', { material: 'JEANS' });
+    const r = montarLook(
+      [...armario, macacao],
+      intencao({ incluir: [{ categoria: 'MACACAO', cor: null, material: null }] }),
+      sempreOPrimeiro,
+    );
+    const papeis = look(r).pecas.map((p) => p.papel);
+    assert.deepEqual(papeis.sort(), ['CALCADO', 'PECA_UNICA']);
+  });
+
+  it('usa a bota pedida como calçado', () => {
+    const bota = peca('BOTA', 'Castanho', 'COLORADD_CASTANHO', '#6B4226', { material: 'CAMURCA' });
+    const r = look(
+      montarLook(
+        [...armario, bota],
+        intencao({ incluir: [{ categoria: 'BOTA', cor: null, material: null }] }),
+        sempreOPrimeiro,
+      ),
+    );
+    const calcado = r.pecas.find((p) => p.papel === 'CALCADO');
+    assert.equal(calcado?.id, bota.id);
+  });
+
+  it('descreve o material novo quando não acha a peça pedida', () => {
+    const r = look(
+      montarLook(
+        armario,
+        intencao({ incluir: [{ categoria: 'BOTA', cor: null, material: 'CAMURCA' }] }),
+        sempreOPrimeiro,
+      ),
+    );
+    assert.ok(
+      r.avisos.some((a) => a.includes('bota de camurça')),
+      JSON.stringify(r.avisos),
+    );
+  });
+});

@@ -36,23 +36,32 @@ export type Tom = (typeof TONS)[number];
 
 /**
  * Lugar de cada categoria no look:
- * superior + inferior + calçado, ou peça única (vestido) + calçado.
- * Sobreposição (jaqueta, blazer) é opcional e vai por cima do superior.
+ * superior + inferior + calçado, ou peça única (vestido, macacão) + calçado.
+ * Sobreposição (jaqueta, casaco, blazer, cardigã, colete) é opcional e vai
+ * por cima do superior.
  */
 export type Papel = 'SUPERIOR' | 'SOBREPOSICAO' | 'INFERIOR' | 'PECA_UNICA' | 'CALCADO';
 
 export const PAPEL_DA_CATEGORIA: Record<Categoria, Papel> = {
   CAMISETA: 'SUPERIOR',
+  POLO: 'SUPERIOR',
+  REGATA: 'SUPERIOR',
   CAMISA: 'SUPERIOR',
   MOLETOM: 'SUPERIOR',
+  CARDIGA: 'SOBREPOSICAO',
   JAQUETA: 'SOBREPOSICAO',
+  CASACO: 'SOBREPOSICAO',
   BLAZER: 'SOBREPOSICAO',
+  COLETE: 'SOBREPOSICAO',
   CALCA: 'INFERIOR',
   SHORT: 'INFERIOR',
   SAIA: 'INFERIOR',
   VESTIDO: 'PECA_UNICA',
+  MACACAO: 'PECA_UNICA',
   TENIS: 'CALCADO',
   SAPATO: 'CALCADO',
+  BOTA: 'CALCADO',
+  SANDALIA: 'CALCADO',
 };
 
 export const FORMALIDADE_DO_ESTILO: Record<Estilo, Formalidade> = {
@@ -60,6 +69,8 @@ export const FORMALIDADE_DO_ESTILO: Record<Estilo, Formalidade> = {
   STREETWEAR: 'BAIXA',
   CASUAL: 'MEDIA',
   BASICO: 'MEDIA',
+  // Esporte fino fica entre casual e social; com tres niveis, cai no do meio.
+  ESPORTE_FINO: 'MEDIA',
   SOCIAL: 'ALTA',
   ELEGANTE: 'ALTA',
 };

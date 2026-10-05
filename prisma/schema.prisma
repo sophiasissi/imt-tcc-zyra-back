@@ -31,25 +31,36 @@ enum TipoDaltonismo {
   PREFIRO_NAO_DIZER
 }
 
-// Valores da peca. Espelham src/clothing_analysis/taxonomy.py (visao) e
-// src/looks/taxonomia.ts: os tres precisam ter exatamente os mesmos codigos.
+// Valores da peca. Espelham src/clothing_analysis/taxonomy.py (visao), onde
+// esta a descricao de cada um. Base: ontologia Fashionpedia (ECCV 2020),
+// Google Product Taxonomy e os codigos de vestimenta do Emily Post Institute.
+// src/looks/taxonomia.ts le estes enums direto do @prisma/client.
 
 enum Categoria {
   CAMISETA
+  POLO
+  REGATA
   CAMISA
   MOLETOM
+  CARDIGA
   JAQUETA
+  CASACO
   BLAZER
+  COLETE
   CALCA
   SHORT
   SAIA
   VESTIDO
+  MACACAO
   TENIS
   SAPATO
+  BOTA
+  SANDALIA
 }
 
 enum Estilo {
   CASUAL
+  ESPORTE_FINO
   SOCIAL
   ESPORTIVO
   STREETWEAR
@@ -62,6 +73,9 @@ enum Estampa {
   ESTAMPADO
   LISTRADO
   XADREZ
+  FLORAL
+  POA
+  ANIMAL_PRINT
   LOGO
 }
 
@@ -69,6 +83,7 @@ enum Ocasiao {
   DIA_A_DIA
   TRABALHO
   FESTA
+  EVENTO_FORMAL
   ACADEMIA
   PRAIA
   CASA
@@ -83,6 +98,11 @@ enum Aquecimento {
 enum Material {
   JEANS
   COURO
+  VERNIZ
+  CAMURCA
+  TRICO
+  PELO
+  PAETE
 }
 
 model Usuario {

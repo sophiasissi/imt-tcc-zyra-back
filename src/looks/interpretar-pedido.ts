@@ -87,7 +87,8 @@ Campos:
 - ocasiao:
   - DIA_A_DIA: rotina, faculdade, passeio, churrasco
   - TRABALHO: escritório, reunião, entrevista
-  - FESTA: aniversário, balada, casamento
+  - FESTA: aniversário, balada, show, confraternização
+  - EVENTO_FORMAL: casamento, formatura, jantar formal, evento de gala, teatro
   - ACADEMIA: treino, corrida
   - PRAIA: praia, piscina
   - CASA: ficar na própria casa, dormir
@@ -102,7 +103,11 @@ Campos:
   que ele disse. Bolsa, mochila, boné e outros acessórios não fazem parte do closet:
   não entram em incluir, vão para naoMapeado.
 - evitarCategorias e evitarCores: só o que o usuário disse que não quer.
-- categorias: ${CATEGORIAS.join(', ')}. materiais: ${MATERIAIS.join(', ')}.
+- categorias: ${CATEGORIAS.join(', ')}. Blusinha de alça = REGATA, suéter = MOLETOM,
+  sobretudo e parka = CASACO, macaquinho e jardineira = MACACAO, botina = BOTA,
+  chinelo e rasteira = SANDALIA, scarpin e mocassim = SAPATO.
+- materiais: ${MATERIAIS.join(', ')}. Suede = CAMURCA, crochê = TRICO,
+  lantejoula = PAETE, pelúcia e teddy = PELO.
 - cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}
   opcional. Rosa = VERMELHO CLARO, marrom = CASTANHO, marinho = AZUL ESCURO,
   vinho = VERMELHO ESCURO.
