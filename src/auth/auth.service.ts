@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AdminDeleteUserCommand,
+  AdminGetUserCommand,
   CognitoIdentityProviderClient,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
@@ -23,6 +25,7 @@ import {
 export class AuthService {
   private readonly cognitoClient: CognitoIdentityProviderClient;
   private readonly clientId: string;
+  private readonly userPoolId: string;
 
   constructor(private readonly configService: ConfigService) {
     this.cognitoClient = new CognitoIdentityProviderClient({
@@ -30,6 +33,7 @@ export class AuthService {
     });
 
     this.clientId = this.configService.getOrThrow<string>('COGNITO_CLIENT_ID');
+    this.userPoolId = this.configService.getOrThrow<string>('COGNITO_USER_POOL_ID');
   }
 
   private handleCognitoError(error: unknown): never {
@@ -92,32 +96,121 @@ export class AuthService {
     );
   }
 
-  async signUp(email: string, password: string) {
-    try {
-      const normalizedEmail = email.trim().toLowerCase();
+  /**
+   * Cria a conta no Cognito.
+   *
+   * Se o email ja' tem uma conta que nunca foi confirmada (a pessoa se
+   * cadastrou e nao digitou o codigo), essa conta pendente e' apagada e criada
+   * de novo com os dados atuais. Sem isso o email ficaria preso: o Cognito nao
+   * aceita novo cadastro nem recuperacao de senha de conta nao confirmada.
+   * E' seguro porque ninguem provou ser dono do email, e o novo cadastro tambem
+   * exige o codigo.
+   *
+   * `aoRemoverContaPendente` recebe o sub da conta apagada, para quem chamou
+   * remover o perfil que o cadastro pendente gravou no banco.
+   */
+  async signUp(
+    email: string,
+    password: string,
+    aoRemoverContaPendente?: (sub: string) => Promise<unknown>,
+  ) {
+    const normalizedEmail = email.trim().toLowerCase();
 
-      const response = await this.cognitoClient.send(
-        new SignUpCommand({
-          ClientId: this.clientId,
-          Username: normalizedEmail,
-          Password: password,
-          UserAttributes: [
-            {
-              Name: 'email',
-              Value: normalizedEmail,
-            },
-          ],
-        }),
+    try {
+      return await this.cadastrarNoCognito(normalizedEmail, password);
+    } catch (error) {
+      if (
+        !(error instanceof CognitoIdentityProviderServiceException) ||
+        error.name !== 'UsernameExistsException'
+      ) {
+        this.handleCognitoError(error);
+      }
+
+      const subPendente = await this.removerContaNaoConfirmada(normalizedEmail);
+
+      if (!subPendente) {
+        // Conta confirmada (ou nao deu para verificar): o email ja' tem dono.
+        this.handleCognitoError(error);
+      }
+
+      if (aoRemoverContaPendente) {
+        try {
+          await aoRemoverContaPendente(subPendente);
+        } catch (erroBanco) {
+          console.error(
+            '[Cadastro] Conta pendente removida do Cognito, mas o perfil dela não saiu do banco:',
+            erroBanco,
+          );
+        }
+      }
+
+      try {
+        return await this.cadastrarNoCognito(normalizedEmail, password);
+      } catch (erroNovo) {
+        this.handleCognitoError(erroNovo);
+      }
+    }
+  }
+
+  private async cadastrarNoCognito(normalizedEmail: string, password: string) {
+    const response = await this.cognitoClient.send(
+      new SignUpCommand({
+        ClientId: this.clientId,
+        Username: normalizedEmail,
+        Password: password,
+        UserAttributes: [
+          {
+            Name: 'email',
+            Value: normalizedEmail,
+          },
+        ],
+      }),
+    );
+
+    return {
+      message: 'Código de confirmação enviado para o email informado.',
+      // O sub definitivo do usuario ja' existe aqui, antes da confirmacao.
+      // E' com ele que o perfil e' gravado no mesmo momento do cadastro.
+      userSub: response.UserSub,
+    };
+  }
+
+  /**
+   * Apaga a conta do email se ela nunca foi confirmada e devolve o sub dela.
+   * Devolve null se a conta esta' confirmada ou se nao deu para consultar
+   * (ex.: o usuario IAM do back sem cognito-idp:AdminGetUser/AdminDeleteUser).
+   */
+  private async removerContaNaoConfirmada(normalizedEmail: string): Promise<string | null> {
+    try {
+      const conta = await this.cognitoClient.send(
+        new AdminGetUserCommand({ UserPoolId: this.userPoolId, Username: normalizedEmail }),
       );
 
-      return {
-        message: 'Código de confirmação enviado para o email informado.',
-        // O sub definitivo do usuario ja' existe aqui, antes da confirmacao.
-        // E' com ele que o perfil e' gravado no mesmo momento do cadastro.
-        userSub: response.UserSub,
-      };
+      if (conta.UserStatus !== 'UNCONFIRMED') {
+        return null;
+      }
+
+      const sub = conta.UserAttributes?.find((atributo) => atributo.Name === 'sub')?.Value;
+
+      if (!sub) {
+        return null;
+      }
+
+      await this.cognitoClient.send(
+        new AdminDeleteUserCommand({ UserPoolId: this.userPoolId, Username: normalizedEmail }),
+      );
+
+      console.log(
+        `[Cadastro] Conta não confirmada de ${normalizedEmail} removida para um novo cadastro.`,
+      );
+
+      return sub;
     } catch (error) {
-      this.handleCognitoError(error);
+      console.error(
+        '[Cadastro] Não foi possível verificar ou remover a conta não confirmada:',
+        error,
+      );
+      return null;
     }
   }
 
