@@ -67,7 +67,7 @@ export class VisionService {
     // taxonomia, como bone e chapeu.
     if (!analise.category) {
       throw new UnprocessableEntityException(
-        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis, sapatos e bolsas.',
+        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
       );
     }
 
