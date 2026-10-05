@@ -102,7 +102,12 @@ export class AuthController {
    */
   @Post('signup')
   async signUp(@Body() body: SignUpDto) {
-    const resultado = await this.authService.signUp(body.email, body.password);
+    // Se havia uma conta pendente (nunca confirmada) com este email, ela e'
+    // recriada; o perfil que ela gravou no banco sai junto. Ela nunca pode ter
+    // pecas: sem confirmar, ninguem consegue entrar na conta.
+    const resultado = await this.authService.signUp(body.email, body.password, (subPendente) =>
+      this.prisma.usuario.deleteMany({ where: { cognitoSub: subPendente } }),
+    );
 
     if (resultado.userSub) {
       const emailNormalizado = body.email.toLowerCase();
@@ -129,8 +134,10 @@ export class AuthController {
               `o usuario dele nao existe mais no Cognito.`,
           );
 
+          // O detalhe fica no log acima, para quem mantem o sistema. Quem esta'
+          // se cadastrando nao tem como resolver isso.
           throw new ConflictException(
-            'Existe um cadastro antigo com este email que precisa ser removido antes de criar a conta.',
+            'Não foi possível concluir seu cadastro agora. Tente novamente mais tarde.',
           );
         }
 
