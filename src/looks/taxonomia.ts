@@ -55,6 +55,15 @@ export const PAPEL_DA_CATEGORIA: Record<Categoria, Papel> = {
   SAPATO: 'CALCADO',
 };
 
+/** Ordem em que as peças de um look aparecem: cima, camada, baixo, calçado. */
+export const ORDEM_DOS_PAPEIS: Papel[] = [
+  'SUPERIOR',
+  'PECA_UNICA',
+  'SOBREPOSICAO',
+  'INFERIOR',
+  'CALCADO',
+];
+
 export const FORMALIDADE_DO_ESTILO: Record<Estilo, Formalidade> = {
   ESPORTIVO: 'BAIXA',
   STREETWEAR: 'BAIXA',
