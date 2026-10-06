@@ -14,6 +14,7 @@ import {
   Formalidade,
   FORMALIDADE_DO_ESTILO,
   NIVEL_FORMALIDADE,
+  ORDEM_DOS_PAPEIS,
   PAPEL_DA_CATEGORIA,
   Papel,
 } from './taxonomia';
@@ -468,9 +469,8 @@ export function montarLook(
     .slice(0, MAXIMO_FINALISTAS);
   const escolhido = finalistas[Math.floor(aleatorio() * finalistas.length)];
 
-  const ordem: Papel[] = ['SUPERIOR', 'PECA_UNICA', 'SOBREPOSICAO', 'INFERIOR', 'CALCADO'];
   const pecasDoLook = [...escolhido.pecas].sort(
-    (a, b) => ordem.indexOf(a.papel) - ordem.indexOf(b.papel),
+    (a, b) => ORDEM_DOS_PAPEIS.indexOf(a.papel) - ORDEM_DOS_PAPEIS.indexOf(b.papel),
   );
 
   return {

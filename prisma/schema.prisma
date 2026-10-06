@@ -99,6 +99,7 @@ model Usuario {
   nivelDificuldadeLooks Int?
 
   pecas Peca[]
+  looks Look[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -139,10 +140,43 @@ model Peca {
   hexSecundario            String?
   colorAddSymbolSecundario String?
 
+  looks LookPeca[]
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   // O closet sempre lista as pecas de um usuario. Sem indice isso vira
   // varredura da tabela inteira conforme o numero de pecas cresce.
   @@index([usuarioId])
+}
+
+// Look salvo pelo usuario a partir do chat.
+model Look {
+  id String @id @default(uuid())
+
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  nome    String?
+  ocasiao Ocasiao?
+
+  pecas LookPeca[]
+
+  criadoEm DateTime @default(now())
+
+  @@index([usuarioId])
+}
+
+// Pecas de cada look, na ordem em que aparecem (cima, camada, baixo, calcado).
+model LookPeca {
+  lookId String
+  look   Look   @relation(fields: [lookId], references: [id], onDelete: Cascade)
+
+  pecaId String
+  peca   Peca   @relation(fields: [pecaId], references: [id], onDelete: Cascade)
+
+  ordem Int
+
+  @@id([lookId, pecaId])
+  @@index([pecaId])
 }

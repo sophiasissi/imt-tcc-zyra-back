@@ -8,6 +8,11 @@ import { CreatePecaDto } from './dto/create-peca.dto';
 import { UpdatePecaDto } from './dto/update-peca.dto';
 import { CorDaPeca, VisionService } from './vision.service';
 
+// Quantos looks salvos usam a peca: o app avisa antes de apagar.
+const CONTAR_LOOKS = { _count: { select: { looks: true } } } as const;
+
+type PecaComLooks = Peca & { _count?: { looks: number } };
+
 const EXTENSOES: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -78,6 +83,7 @@ export class PecasService {
     const pecas = await this.prisma.peca.findMany({
       where: { usuarioId: usuario.id },
       orderBy: { criadoEm: 'desc' },
+      include: CONTAR_LOOKS,
     });
 
     return Promise.all(pecas.map((peca) => this.toResponse(peca)));
@@ -93,18 +99,28 @@ export class PecasService {
     const atualizada = await this.prisma.peca.update({
       where: { id: peca.id },
       data: dto,
+      include: CONTAR_LOOKS,
     });
 
     return this.toResponse(atualizada);
   }
 
+  /**
+   * Apaga a peca e os looks salvos que a usam (o app avisa antes). Um look sem
+   * uma das pecas nao faz mais sentido, entao ele sai junto, na mesma transacao.
+   */
   async remove(cognitoSub: string, id: string) {
     const peca = await this.findPecaDoUsuario(cognitoSub, id);
 
-    await this.prisma.peca.delete({ where: { id: peca.id } });
+    const [looks] = await this.prisma.$transaction([
+      this.prisma.look.deleteMany({
+        where: { usuarioId: peca.usuarioId, pecas: { some: { pecaId: peca.id } } },
+      }),
+      this.prisma.peca.delete({ where: { id: peca.id } }),
+    ]);
     await this.s3.deleteQuietly(peca.imagemS3Key);
 
-    return { message: 'Peça removida do seu closet.' };
+    return { message: 'Peça removida do seu closet.', looksRemovidos: looks.count };
   }
 
   private async resolverCor(foto: Express.Multer.File, dto: CreatePecaDto): Promise<CorDaPeca> {
@@ -136,6 +152,7 @@ export class PecasService {
 
     const peca = await this.prisma.peca.findFirst({
       where: { id, usuarioId: usuario.id },
+      include: CONTAR_LOOKS,
     });
 
     if (!peca) {
@@ -145,12 +162,14 @@ export class PecasService {
     return peca;
   }
 
-  private async toResponse(peca: Peca) {
-    const { imagemS3Key, ...dados } = peca;
+  private async toResponse(peca: PecaComLooks) {
+    const { imagemS3Key, _count, ...dados } = peca;
 
     return {
       ...dados,
       imagemUrl: await this.s3.getReadUrl(imagemS3Key),
+      // Peca recem-cadastrada ainda nao esta em nenhum look.
+      totalLooks: _count?.looks ?? 0,
     };
   }
 }
