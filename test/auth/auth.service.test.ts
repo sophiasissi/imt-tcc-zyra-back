@@ -119,3 +119,39 @@ describe('AuthService.signUp', () => {
     assert.ok(!chamadas.includes('AdminDeleteUserCommand'));
   });
 });
+
+describe('AuthService.verificarEmail', () => {
+  it('email sem conta: disponível', async () => {
+    const { servico } = criarServico({
+      AdminGetUserCommand: () => {
+        throw erroCognito('UserNotFoundException');
+      },
+    });
+    assert.deepEqual(await servico.verificarEmail('nova@email.com'), { disponivel: true });
+  });
+
+  it('conta confirmada: indisponível', async () => {
+    const { servico } = criarServico({ AdminGetUserCommand: () => ({ UserStatus: 'CONFIRMED' }) });
+    assert.deepEqual(await servico.verificarEmail('pessoa@email.com'), { disponivel: false });
+  });
+
+  it('conta nunca confirmada: disponível, porque o cadastro a recria', async () => {
+    const { servico, chamadas } = criarServico({
+      AdminGetUserCommand: () => ({ UserStatus: 'UNCONFIRMED' }),
+    });
+    assert.deepEqual(await servico.verificarEmail('pessoa@email.com'), { disponivel: true });
+    assert.deepEqual(chamadas, ['AdminGetUserCommand'], 'só consulta, não apaga nada');
+  });
+
+  it('consulta o email normalizado', async () => {
+    let usuario: unknown;
+    const { servico } = criarServico({
+      AdminGetUserCommand: (comando) => {
+        usuario = comando.input.Username;
+        return { UserStatus: 'CONFIRMED' };
+      },
+    });
+    await servico.verificarEmail('  Pessoa@Email.COM ');
+    assert.equal(usuario, 'pessoa@email.com');
+  });
+});
