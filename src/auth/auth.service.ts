@@ -214,6 +214,32 @@ export class AuthService {
     }
   }
 
+  /**
+   * Diz se o email pode ser usado num cadastro novo, antes de a pessoa criar a
+   * senha. Conta pendente (nunca confirmada) conta como livre, porque o signUp
+   * a recria. O /auth/signup continua checando: isto so' adianta o aviso.
+   */
+  async verificarEmail(email: string): Promise<{ disponivel: boolean }> {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    try {
+      const conta = await this.cognitoClient.send(
+        new AdminGetUserCommand({ UserPoolId: this.userPoolId, Username: normalizedEmail }),
+      );
+
+      return { disponivel: conta.UserStatus === 'UNCONFIRMED' };
+    } catch (error) {
+      if (
+        error instanceof CognitoIdentityProviderServiceException &&
+        error.name === 'UserNotFoundException'
+      ) {
+        return { disponivel: true };
+      }
+
+      this.handleCognitoError(error);
+    }
+  }
+
   async confirmSignUp(email: string, confirmationCode: string) {
     try {
       await this.cognitoClient.send(

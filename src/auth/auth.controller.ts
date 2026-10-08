@@ -1,4 +1,5 @@
 import { Body, ConflictException, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CognitoAuthGuard } from './cognito-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterProfileDto } from './dto/register-profile.dto';
@@ -11,6 +12,7 @@ import { SignUpDto } from './dto/signup.dto';
 import { ConfirmSignUpDto } from './dto/confirm-signup.dto';
 import { ResendCodeDto } from './dto/resend-code.dto';
 import { LoginDto } from './dto/login.dto';
+import { VerificarEmailDto } from './dto/verificar-email.dto';
 
 type AuthenticatedRequest = {
   user: {
@@ -166,6 +168,18 @@ export class AuthController {
     }
 
     return { message: resultado.message };
+  }
+
+  /**
+   * Primeira etapa do cadastro: avisa se o email ja' tem conta antes de a
+   * pessoa criar a senha. A resposta revela quem tem conta, entao o limite por
+   * IP impede varrer uma lista de emails.
+   */
+  @Post('verificar-email')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verificarEmail(@Body() body: VerificarEmailDto) {
+    return this.authService.verificarEmail(body.email);
   }
 
   @Post('confirm-signup')
