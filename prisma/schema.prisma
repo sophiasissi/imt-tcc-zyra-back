@@ -28,6 +28,8 @@ enum TipoDaltonismo {
   TRITANOPIA
   ACROMATOPSIA
   NAO_SEI
+  // Resposta "Nao tenho" do cadastro: a pessoa nao e' daltonica.
+  NAO_TENHO
   PREFIRO_NAO_DIZER
 }
 
@@ -97,6 +99,16 @@ model Usuario {
   genero                Genero?
   tipoDaltonismo        TipoDaltonismo?
   nivelDificuldadeLooks Int?
+
+  // Quando a pessoa autorizou guardar o tipo de daltonismo (dado de saude,
+  // sensivel na LGPD). Null sem autorizacao ou depois de revoga-la.
+  consentimentoSaudeEm DateTime?
+
+  // Aceite dos Termos de uso no cadastro (checkbox da tela inicial do app).
+  // A versao e' a data dos Termos aceitos, para saber quem aceitou qual texto
+  // se eles mudarem.
+  termosAceitosEm    DateTime?
+  versaoTermosAceita String?
 
   pecas Peca[]
   looks Look[]

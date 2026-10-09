@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 enum Genero {
   MASCULINO = 'MASCULINO',
@@ -17,6 +17,7 @@ enum TipoDaltonismo {
   TRITANOPIA = 'TRITANOPIA',
   ACROMATOPSIA = 'ACROMATOPSIA',
   NAO_SEI = 'NAO_SEI',
+  NAO_TENHO = 'NAO_TENHO',
   PREFIRO_NAO_DIZER = 'PREFIRO_NAO_DIZER',
 }
 
@@ -31,7 +32,16 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsEnum(TipoDaltonismo)
-  tipoDaltonismo?: TipoDaltonismo;
+  tipoDaltonismo?: TipoDaltonismo | null;
+
+  /**
+   * Autorizacao especifica para guardar o tipo de daltonismo (dado de saude).
+   * Obrigatoria na primeira vez que um tipo diferente de PREFIRO_NAO_DIZER e'
+   * salvo; ver UsersService.consentimentoParaSalvar.
+   */
+  @IsOptional()
+  @IsBoolean()
+  consentimentoDadosSaude?: boolean;
 
   @IsOptional()
   @IsInt()

@@ -35,6 +35,9 @@ export class CognitoAuthGuard implements CanActivate {
       request.user = {
         cognitoSub: payload.sub,
         email: payload.email,
+        // O proprio token, para as rotas que agem no Cognito em nome do
+        // usuario (trocar a senha, excluir a conta).
+        accessToken: token,
       };
 
       return true;

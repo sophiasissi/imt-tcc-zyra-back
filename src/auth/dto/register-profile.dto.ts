@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RegisterProfileDto {
   /**
@@ -16,4 +16,10 @@ export class RegisterProfileDto {
   @IsEmail()
   @IsNotEmpty()
   email!: string;
+
+  /** Versao dos Termos aceita no cadastro, se o perfil nao saiu no signup. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  versaoTermosAceita?: string;
 }
