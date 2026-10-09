@@ -13,10 +13,13 @@ import { ConfirmSignUpDto } from './dto/confirm-signup.dto';
 import { ResendCodeDto } from './dto/resend-code.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerificarEmailDto } from './dto/verificar-email.dto';
+import { AlterarSenhaDto } from './dto/alterar-senha.dto';
+import { EmailService } from '../email/email.service';
 
 type AuthenticatedRequest = {
   user: {
     cognitoSub: string;
+    accessToken: string;
   };
 };
 
@@ -25,6 +28,7 @@ export class AuthController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly emailService: EmailService,
   ) {}
 
   @Post('forgot-password')
@@ -34,11 +38,21 @@ export class AuthController {
 
   @Post('confirm-forgot-password')
   async confirmForgotPassword(@Body() body: ConfirmForgotPasswordDto) {
-    return this.authService.confirmForgotPassword(
+    const resultado = await this.authService.confirmForgotPassword(
       body.email,
       body.confirmationCode,
       body.newPassword,
     );
+
+    // Aviso por e-mail (OWASP): se nao foi a pessoa, ela fica sabendo.
+    const email = body.email.trim().toLowerCase();
+    const usuario = await this.prisma.usuario
+      .findUnique({ where: { email }, select: { nome: true } })
+      .catch(() => null);
+
+    await this.emailService.avisarSenhaAlterada(email, usuario?.nome);
+
+    return resultado;
   }
 
   @UseGuards(CognitoAuthGuard)
@@ -70,6 +84,9 @@ export class AuthController {
         cognitoSub,
         nome: body.nome.trim(),
         email: normalizedEmail,
+        ...(body.versaoTermosAceita
+          ? { termosAceitosEm: new Date(), versaoTermosAceita: body.versaoTermosAceita }
+          : {}),
       },
     });
   }
@@ -143,13 +160,20 @@ export class AuthController {
           );
         }
 
+        // Prova do aceite dos Termos: quando e qual versao.
+        const aceite = {
+          termosAceitosEm: new Date(),
+          versaoTermosAceita: body.versaoTermosAceita,
+        };
+
         await this.prisma.usuario.upsert({
           where: { cognitoSub: resultado.userSub },
-          update: {},
+          update: aceite,
           create: {
             cognitoSub: resultado.userSub,
             nome: body.nome,
             email: emailNormalizado,
+            ...aceite,
           },
         });
       } catch (error) {
@@ -195,5 +219,35 @@ export class AuthController {
   @Post('login')
   login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.password);
+  }
+
+  /**
+   * Troca a senha de quem esta' logado (Configuracoes > Alterar senha). O
+   * limite por IP freia quem tente adivinhar a senha atual com o celular de
+   * outra pessoa desbloqueado.
+   */
+  @Post('change-password')
+  @UseGuards(CognitoAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async alterarSenha(@Req() req: AuthenticatedRequest, @Body() body: AlterarSenhaDto) {
+    const resultado = await this.authService.alterarSenha(
+      req.user.accessToken,
+      body.senhaAtual,
+      body.novaSenha,
+    );
+
+    // Aviso por e-mail (OWASP): se nao foi a pessoa, ela fica sabendo.
+    const usuario = await this.prisma.usuario
+      .findUnique({
+        where: { cognitoSub: req.user.cognitoSub },
+        select: { nome: true, email: true },
+      })
+      .catch(() => null);
+
+    if (usuario?.email) {
+      await this.emailService.avisarSenhaAlterada(usuario.email, usuario.nome);
+    }
+
+    return resultado;
   }
 }

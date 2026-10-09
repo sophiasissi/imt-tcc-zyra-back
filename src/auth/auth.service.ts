@@ -10,7 +10,9 @@ import { ConfigService } from '@nestjs/config';
 import {
   AdminDeleteUserCommand,
   AdminGetUserCommand,
+  ChangePasswordCommand,
   CognitoIdentityProviderClient,
+  DeleteUserCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
   InitiateAuthCommand,
@@ -373,6 +375,71 @@ export class AuthService {
       };
     } catch {
       throw new UnauthorizedException('Sua sessão expirou. Entre novamente para continuar.');
+    }
+  }
+
+  /**
+   * Troca a senha de quem esta' logado. A senha atual errada volta como 400,
+   * e nao 401: o app trata 401 como sessao vencida e tentaria renovar o token.
+   */
+  async alterarSenha(accessToken: string, senhaAtual: string, novaSenha: string) {
+    try {
+      await this.cognitoClient.send(
+        new ChangePasswordCommand({
+          AccessToken: accessToken,
+          PreviousPassword: senhaAtual,
+          ProposedPassword: novaSenha,
+        }),
+      );
+
+      return { message: 'Senha alterada com sucesso.' };
+    } catch (error) {
+      if (
+        error instanceof CognitoIdentityProviderServiceException &&
+        error.name === 'NotAuthorizedException'
+      ) {
+        throw new BadRequestException('A senha atual está incorreta.');
+      }
+
+      this.handleCognitoError(error);
+    }
+  }
+
+  /**
+   * Confirma a senha antes de uma acao irreversivel (excluir a conta), sem
+   * abrir sessao nova: os tokens devolvidos sao descartados. Senha errada
+   * volta como 400, pelo mesmo motivo do alterarSenha.
+   */
+  async confirmarSenha(email: string, senha: string) {
+    try {
+      await this.cognitoClient.send(
+        new InitiateAuthCommand({
+          AuthFlow: 'USER_PASSWORD_AUTH',
+          ClientId: this.clientId,
+          AuthParameters: {
+            USERNAME: email.trim().toLowerCase(),
+            PASSWORD: senha,
+          },
+        }),
+      );
+    } catch (error) {
+      if (
+        error instanceof CognitoIdentityProviderServiceException &&
+        error.name === 'NotAuthorizedException'
+      ) {
+        throw new BadRequestException('A senha está incorreta.');
+      }
+
+      this.handleCognitoError(error);
+    }
+  }
+
+  /** Apaga a conta do proprio usuario no Cognito (nao precisa de permissao IAM). */
+  async excluirContaNoCognito(accessToken: string) {
+    try {
+      await this.cognitoClient.send(new DeleteUserCommand({ AccessToken: accessToken }));
+    } catch (error) {
+      this.handleCognitoError(error);
     }
   }
 

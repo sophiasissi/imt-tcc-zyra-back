@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
+import { EmailModule } from './email/email.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { LooksModule } from './looks/looks.module';
 import { PecasModule } from './pecas/pecas.module';
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module';
     }),
     PrismaModule,
     StorageModule,
+    EmailModule,
     AuthModule,
     UsersModule,
     PecasModule,
