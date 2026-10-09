@@ -138,3 +138,40 @@ O artigo precisa ser atualizado em cinco pontos:
 - **Detecção de cor:** usa k-means + LCh, e não só a "região central".
 - **Chamadas de visão:** o app fala direto com a API de visão.
 - **Telefone:** foi removido do cadastro.
+
+## 08/10/2026: `NAO_TENHO` no tipo de daltonismo
+
+- Novo valor `NAO_TENHO` no enum `TipoDaltonismo` (schema e `src/users/dto/update-profile.dto.ts`). É a resposta "Não tenho" do cadastro e de Informações pessoais no app.
+- Migrations:
+  - `20261008120000_adiciona_nao_tenho_daltonismo`: só o `ADD VALUE`;
+  - `20261008120100_preenche_nao_tenho_daltonismo`: passa para `NAO_TENHO` quem tem o tipo `null` e `dataNascimento` preenchida. Antes, o "Não tenho!" do cadastro deixava o campo vazio.
+- `Genero.OUTRO` e `TipoDaltonismo.PREFIRO_NAO_DIZER` não são mais oferecidos pelo app, mas continuam no enum: tirar um valor exige recriar o tipo e falha se alguém o tiver salvo.
+- O DTO repete os enums do Prisma à mão. Ao mudar um enum, mude os dois (ou passe a importar de `@prisma/client`).
+
+## 09/10/2026: troca de senha, exclusão de conta e consentimento (sem commit)
+
+- **Migrations** (aplicadas no banco da Sophia em 09/10; quem puxar roda `npx prisma migrate deploy`): as duas do `NAO_TENHO` (08/10) e a `20261009120000_consentimento_dados_saude`. Sem a última, todo `/users/me` dá 500, porque a coluna `consentimentoSaudeEm` não existe.
+- `POST /auth/change-password` `{senhaAtual, novaSenha}`: `CognitoAuthGuard` + `ThrottlerGuard` (5 por minuto), com `ChangePasswordCommand`. Senha errada volta como 400, e não 401, porque o app renova o token em qualquer 401.
+- `DELETE /users/me` `{senha}`: guard + limite de 5 por minuto.
+  - Confere a senha (`AuthService.confirmarSenha`) e, numa transação interativa, apaga o `Usuario` (cascata) e por último a conta no Cognito (`excluirContaNoCognito`, `DeleteUserCommand`). As fotos do S3 saem depois do commit.
+  - O `AuthModule` exporta o `AuthService`, e o `UsersModule` o importa.
+- O `CognitoAuthGuard` agora põe o token em `req.user.accessToken`.
+- Consentimento do dado de saúde: coluna `Usuario.consentimentoSaudeEm`, campo `consentimentoDadosSaude` no DTO, e as regras em `UsersService.consentimentoParaSalvar` (um tipo diferente de `PREFIRO_NAO_DIZER` exige consentimento na primeira vez; `PREFIRO_NAO_DIZER` ou `null` o revogam).
+- Atenção: este CLAUDE.md está versionado no git do back (aparece como modificado), apesar do `.gitignore`.
+
+## 09/10/2026 (tarde): aceite dos Termos e e-mail de aviso
+
+- Migration `20261009130000_aceite_termos` (aplicada no banco da Sophia em 09/10), que cria `Usuario.termosAceitosEm` e `versaoTermosAceita`.
+  - O `/auth/signup` agora **exige** `versaoTermosAceita` (o app manda) e grava os dois campos no upsert.
+  - O `register-profile` aceita o campo como opcional.
+- `src/email/` (`EmailModule` global, `EmailService` com SES v2): envia "Sua senha do ZYRA foi alterada" depois de `change-password` e de `confirm-forgot-password`. Nunca lança erro.
+- Configuração: `SES_REMETENTE` no `.env` (vazio = só log), remetente verificado no SES us-east-2 e permissão `ses:SendEmail` no IAM. Em sandbox, só chega a destinatários verificados.
+
+## 09/10/2026 (noite): pente fino e commits
+
+- Pente fino:
+  - 70 testes passando (22 novos em `test/auth/senha-e-conta.test.ts`, `test/users/` e `test/email/`);
+  - rotas novas testadas com o servidor rodando (400 na validação, 401 sem token ou com token falso);
+  - banco conferido só com leitura: colunas novas, preenchimento do `NAO_TENHO`, transação interativa no adapter-pg e FKs com `ON DELETE CASCADE`.
+- Commits feitos pela Sophia, em 3 grupos: banco; senha, exclusão e e-mail; testes. Este `CLAUDE.md` fica fora dos commits.
+- Quem puxar: `npm install` (por causa do `@aws-sdk/client-sesv2`) e `npx prisma migrate deploy`.
