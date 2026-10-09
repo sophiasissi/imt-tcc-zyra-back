@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsString, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 
 export class SignUpDto {
   /**
@@ -25,4 +25,13 @@ export class SignUpDto {
       'A senha deve ter no mínimo 8 caracteres, incluindo letra maiúscula, minúscula, número e caractere especial.',
   })
   password!: string;
+
+  /**
+   * Versao dos Termos de uso que a pessoa marcou como aceitos na tela inicial
+   * do cadastro (ex.: '2026-10-09'). Sem ela, a conta nao e' criada.
+   */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  versaoTermosAceita!: string;
 }
