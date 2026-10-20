@@ -133,6 +133,9 @@ model Usuario {
   termosAceitosEm    DateTime?
   versaoTermosAceita String?
 
+  // Foto de perfil no S3 (bucket privado; a API devolve uma URL assinada).
+  fotoS3Key String?
+
   pecas Peca[]
   looks Look[]
 
