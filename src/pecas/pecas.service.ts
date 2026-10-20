@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
+import { coresDaPeca } from './cor-da-peca';
 import { CreatePecaDto } from './dto/create-peca.dto';
 import { UpdatePecaDto } from './dto/update-peca.dto';
 import { CorDaPeca, VisionService } from './vision.service';
@@ -41,10 +42,10 @@ export class PecasService {
   async create(cognitoSub: string, foto: Express.Multer.File, dto: CreatePecaDto) {
     const usuario = await this.findUsuario(cognitoSub);
 
-    // A cor e obrigatoria. Normalmente vem do app; se nao veio, a leitura e
-    // gratuita e acontece antes do upload, entao uma falha aqui nao deixa nada
-    // para limpar.
-    const cor = await this.resolverCor(foto, dto);
+    // A cor e obrigatoria. A leitura por pixels normalmente vem do app; se nao
+    // veio, e gratuita e acontece antes do upload, entao uma falha aqui nao
+    // deixa nada para limpar. A analise abaixo corrige o nome e o simbolo.
+    const corLida = await this.resolverCor(foto, dto);
 
     const extensao = EXTENSOES[foto.mimetype] ?? 'jpg';
     const imagemS3Key = `usuarios/${usuario.id}/roupas/${randomUUID()}.${extensao}`;
@@ -61,12 +62,13 @@ export class PecasService {
           usuarioId: usuario.id,
           imagemS3Key,
           categoria: analise.category,
+          manga: analise.sleeve,
           estilo: analise.style,
           estampa: analise.pattern,
           ocasioes: analise.occasions,
           aquecimento: analise.warmth,
           material: analise.material,
-          ...cor,
+          ...coresDaPeca(corLida, analise),
         },
       });
     } catch (error) {

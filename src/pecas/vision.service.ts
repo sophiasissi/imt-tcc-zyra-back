@@ -5,7 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Aquecimento, Categoria, Estampa, Estilo, Material, Ocasiao } from '@prisma/client';
+import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } from '@prisma/client';
 
 /**
  * Resposta do /analyze-clothing. Os codigos vem de taxonomy.py e sao os mesmos
@@ -13,12 +13,21 @@ import { Aquecimento, Categoria, Estampa, Estilo, Material, Ocasiao } from '@pri
  */
 export type AnaliseRoupa = {
   category: Categoria | null;
+  sleeve: Manga | null;
   style: Estilo | null;
   pattern: Estampa | null;
   warmth: Aquecimento | null;
   material: Material | null;
   occasions: Ocasiao[];
+  /**
+   * Cores vistas pela OpenAI, um dos 27 simbolos do ColorADD. O hex e a cor de
+   * referencia do simbolo, e nao uma cor medida na foto.
+   */
+  primaryColor: CorDaVisao | null;
+  secondaryColor: CorDaVisao | null;
 };
+
+type CorDaVisao = { colorName: string; hex: string; colorAddSymbol: string };
 
 /** Resposta do /detect-color, ja com os nomes dos campos da Peca. */
 export type CorDaPeca = {
@@ -67,7 +76,7 @@ export class VisionService {
     // taxonomia, como bone e chapeu.
     if (!analise.category) {
       throw new UnprocessableEntityException(
-        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
+        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, blusas, croppeds, tops, bodies, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
       );
     }
 
