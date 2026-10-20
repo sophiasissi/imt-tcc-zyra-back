@@ -21,7 +21,15 @@ export class S3Service {
   constructor(configService: ConfigService) {
     // As credenciais (AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY) sao lidas do
     // ambiente pelo proprio SDK, sem passar por aqui.
-    this.client = new S3Client({ region: configService.getOrThrow<string>('AWS_REGION') });
+    //
+    // Endpoint dualstack (IPv4 e IPv6): em 20/10/2026, a rede de casa do
+    // Gustavo nao conseguia conectar (ou levava ~4 s) nos IPv4 do endpoint
+    // comum do S3 em us-east-2, e as fotos do armario ficavam cinzas. O
+    // dualstack respondeu em ~0,2 s. Vale tambem para as URLs assinadas.
+    this.client = new S3Client({
+      region: configService.getOrThrow<string>('AWS_REGION'),
+      useDualstackEndpoint: true,
+    });
     this.bucket = configService.getOrThrow<string>('S3_BUCKET');
   }
 
