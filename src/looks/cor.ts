@@ -80,8 +80,18 @@ const REFERENCIA: Record<FamiliaCor, string> = {
   BRANCO: '#F2F2F2',
 };
 
+/**
+ * O ColorADD não tem rosa: a visão grava rosa bebê e salmão como Vermelho Claro,
+ * e pink e rosa choque como Roxo Claro. O interpretador traduz "rosa" para
+ * VERMELHO CLARO, então esse pedido também aceita peças Roxo Claro.
+ */
+function eRosa(cor: { familia: FamiliaCor; tom: Tom | null }) {
+  return (cor.familia === 'VERMELHO' || cor.familia === 'ROXO') && cor.tom === 'CLARO';
+}
+
 /** O nome bate: mesma família e, se o usuário disse o tom, o mesmo tom. */
 export function corBateComPedido(pedida: { familia: FamiliaCor; tom: Tom | null }, peca: CorPeca) {
+  if (pedida.familia === 'VERMELHO' && pedida.tom === 'CLARO' && eRosa(peca)) return true;
   return pedida.familia === peca.familia && (pedida.tom === null || pedida.tom === peca.tom);
 }
 
