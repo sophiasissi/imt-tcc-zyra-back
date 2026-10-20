@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Peca } from '@prisma/client';
 
+import { FotosDaPeca, fotosDaPeca } from '../pecas/fotos-da-peca';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import { SalvarLookDto } from './dto/salvar-look.dto';
 import { TituloDoLookService } from './titulo-do-look';
 import { ORDEM_DOS_PAPEIS, PAPEL_DA_CATEGORIA, Papel } from './taxonomia';
 
-export type PecaDoLookSalvo = Omit<Peca, 'imagemS3Key'> & { imagemUrl: string; papel: Papel };
+export type PecaDoLookSalvo = Omit<Peca, 'imagemS3Key' | 'imagemMiniS3Key'> &
+  FotosDaPeca & { papel: Papel };
 
 export type LookSalvo = {
   id: string;
@@ -132,11 +134,11 @@ export class LooksSalvosService {
       [...look.pecas]
         .sort((a, b) => a.ordem - b.ordem)
         .map(async ({ peca }) => {
-          const { imagemS3Key, ...dados } = peca;
+          const { imagemS3Key, imagemMiniS3Key, ...dados } = peca;
           return {
             ...dados,
             papel: PAPEL_DA_CATEGORIA[peca.categoria],
-            imagemUrl: await this.s3.getReadUrl(imagemS3Key),
+            ...(await fotosDaPeca(this.s3, { imagemS3Key, imagemMiniS3Key })),
           };
         }),
     );

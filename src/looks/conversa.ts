@@ -87,3 +87,28 @@ export function perguntaDoLook(opcoes: {
   const convite = CONVITES_PARA_AJUSTAR[Math.floor(sorteio * CONVITES_PARA_AJUSTAR.length)];
   return `${convite} ${PERGUNTA_SALVAR}`;
 }
+
+// "Põe uma blusa também", "adiciona uma jaqueta", "coloca um moletom por cima".
+const ACRESCENTAR =
+  /\b(tamb[eé]m|adiciona|adicionar|acrescenta|acrescentar|coloca|colocar|bota|botar|p[oõ]e|inclui|incluir)\b/;
+const POR_CIMA = /\bpor cima\b/;
+
+/**
+ * Pedido para acrescentar uma peça ao look da tela, sem tirar nenhuma. A IA às
+ * vezes marca isso como troca da camada (certo) e às vezes como look novo
+ * ("quero uma blusa também"); aqui o texto decide.
+ */
+export function pedeParaAcrescentar(mensagem: string) {
+  const texto = normalizar(mensagem);
+  return POR_CIMA.test(texto) || (ACRESCENTAR.test(texto) && !/\btroca/.test(texto));
+}
+
+// Palavras de cor que a pessoa pode usar no pedido (com variações de gênero e
+// plural pelo começo da palavra).
+const PALAVRA_DE_COR =
+  /\b(pret|branc|cinz|vermelh|ros[ae]|vinho|bord[oô]|azul|azuis|marinho|verde|amarel|laranja|rox[ao]|lil[aá]s|marrom|marrons|bege|caramelo|creme|nude|mostarda|dourad|prat|colorid|neutr|clar[ao]|escur[ao])/;
+
+/** A mensagem fala de alguma cor? */
+export function falaDeCor(mensagem: string) {
+  return PALAVRA_DE_COR.test(normalizar(mensagem));
+}

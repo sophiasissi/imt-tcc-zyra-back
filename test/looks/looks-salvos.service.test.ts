@@ -23,6 +23,7 @@ function peca(id: string, usuarioId: string, categoria: Peca['categoria']): Peca
     id,
     usuarioId,
     imagemS3Key: `usuarios/${usuarioId}/roupas/${id}.jpg`,
+    imagemMiniS3Key: null,
     categoria,
     estilo: 'CASUAL',
     estampa: 'LISO',

@@ -60,6 +60,8 @@ export const PAPEL_DA_CATEGORIA: Record<Categoria, Papel> = {
   VESTIDO: 'PECA_UNICA',
   TENIS: 'CALCADO',
   SAPATO: 'CALCADO',
+  SANDALIA: 'CALCADO',
+  CHINELO: 'CALCADO',
 };
 
 /** Ordem em que as peças de um look aparecem: cima, camada, baixo, calçado. */

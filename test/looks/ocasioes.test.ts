@@ -303,3 +303,25 @@ describe('variedade', () => {
     assert.ok(usadas.size >= 4, `só ${usadas.size} camisetas diferentes em 20 pedidos`);
   });
 });
+
+describe('sandália e chinelo', () => {
+  const chinelo = peca('CHINELO', 'Preto', 'COLORADD_PRETO', '#1A1A1A', {
+    ocasioes: ['DIA_A_DIA'],
+  });
+  const sandalia = peca('SANDALIA', 'Castanho', 'COLORADD_CASTANHO', '#8B5A2B', {
+    ocasioes: ['DIA_A_DIA'],
+  });
+
+  it('chinelo nunca vai para trabalho, festa ou academia, mesmo sem a ocasião marcada', () => {
+    for (const ocasiao of ['TRABALHO', 'FESTA', 'ACADEMIA'] as const) {
+      assert.equal(compatibilidade(chinelo, ocasiao), 'PROIBIDA', ocasiao);
+    }
+    assert.notEqual(compatibilidade(chinelo, 'CASA'), 'PROIBIDA');
+    assert.notEqual(compatibilidade(chinelo, 'PRAIA'), 'PROIBIDA');
+  });
+
+  it('sandália pode ir à festa, mas não à academia', () => {
+    assert.notEqual(compatibilidade(sandalia, 'FESTA'), 'PROIBIDA');
+    assert.equal(compatibilidade(sandalia, 'ACADEMIA'), 'PROIBIDA');
+  });
+});

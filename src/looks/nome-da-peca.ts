@@ -16,6 +16,8 @@ export const NOME_CATEGORIA: Record<Categoria, string> = {
   VESTIDO: 'Vestido',
   TENIS: 'Tênis',
   SAPATO: 'Sapato',
+  SANDALIA: 'Sandália',
+  CHINELO: 'Chinelo',
 };
 
 export const NOME_MATERIAL: Record<Material, string> = {

@@ -19,8 +19,13 @@ type PecaOcasiao = Pick<Peca, 'categoria' | 'estilo' | 'ocasioes' | 'aquecimento
 
 const FORMAIS: Estilo[] = ['SOCIAL', 'ELEGANTE'];
 
-/** Chinelo, babuche e afins: calçado marcado para casa ou praia, e não para trabalho ou festa. */
+/**
+ * Chinelo, babuche e afins. A categoria CHINELO sempre conta; antes dela existir
+ * (20/10/2026), o chinelo era salvo como sapato e só se reconhecia pelas
+ * ocasiões: calçado marcado para casa ou praia, e não para trabalho ou festa.
+ */
 function eCalcadoDeCasaOuPraia(peca: PecaOcasiao) {
+  if (peca.categoria === 'CHINELO') return true;
   return (
     PAPEL_DA_CATEGORIA[peca.categoria] === 'CALCADO' &&
     peca.ocasioes.some((o) => o === 'CASA' || o === 'PRAIA') &&
@@ -28,7 +33,15 @@ function eCalcadoDeCasaOuPraia(peca: PecaOcasiao) {
   );
 }
 
-const PROIBIDAS_NA_ACADEMIA: Categoria[] = ['CAMISA', 'BLAZER', 'SAIA', 'VESTIDO', 'SAPATO'];
+const PROIBIDAS_NA_ACADEMIA: Categoria[] = [
+  'CAMISA',
+  'BLAZER',
+  'SAIA',
+  'VESTIDO',
+  'SAPATO',
+  'SANDALIA',
+  'CHINELO',
+];
 
 // Curtas demais para o escritório.
 const PROIBIDAS_NO_TRABALHO: Categoria[] = ['SHORT', 'CROPPED', 'TOP'];

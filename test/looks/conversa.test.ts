@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { entenderRespostaCurta, PERGUNTA_OCASIAO, PERGUNTA_SALVAR } from '../../src/looks/conversa';
+import {
+  entenderRespostaCurta,
+  pedeParaAcrescentar,
+  PERGUNTA_OCASIAO,
+  PERGUNTA_SALVAR,
+} from '../../src/looks/conversa';
 
 const depoisDe = (pergunta: string) => [{ autor: 'zyra' as const, texto: `look\n\n${pergunta}` }];
 
@@ -30,5 +35,25 @@ describe('entenderRespostaCurta', () => {
       null,
     );
     assert.equal(entenderRespostaCurta('troca o tênis', depoisDe(PERGUNTA_SALVAR)), null);
+  });
+});
+
+describe('pedeParaAcrescentar', () => {
+  it('acréscimo ao look da tela', () => {
+    for (const m of [
+      'adiciona uma blusa ou jaqueta',
+      'quero uma blusa também',
+      'coloca um moletom por cima',
+      'põe uma jaqueta',
+      'bota um casaco',
+    ]) {
+      assert.equal(pedeParaAcrescentar(m), true, m);
+    }
+  });
+
+  it('troca ou look novo não é acréscimo', () => {
+    for (const m of ['troca a camiseta por uma blusa', 'quero uma blusa', 'um look por favor']) {
+      assert.equal(pedeParaAcrescentar(m), false, m);
+    }
   });
 });
