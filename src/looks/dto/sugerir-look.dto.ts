@@ -1,8 +1,12 @@
-import { Type } from 'class-transformer';
+import { Ocasiao } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEnum,
   IsIn,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
@@ -18,6 +22,33 @@ class MensagemHistoricoDto {
   @IsString()
   @MaxLength(500)
   texto!: string;
+}
+
+class LocalizacaoDto {
+  @IsLatitude()
+  latitude!: number;
+
+  @IsLongitude()
+  longitude!: number;
+}
+
+/** Nome e ocasião do look na tela, para salvá-lo igual ao popup de saída do app. */
+class LookMostradoDto {
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MaxLength(60)
+  nome?: string;
+
+  @IsOptional()
+  @IsEnum(Ocasiao)
+  ocasiao?: Ocasiao;
+
+  /** O pedido que gerou o look: vira o título, se não vier nome. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pedido?: string;
 }
 
 export class SugerirLookDto {
@@ -47,4 +78,16 @@ export class SugerirLookDto {
   @ArrayMaxSize(40)
   @IsUUID('4', { each: true })
   pecasRecentes?: string[];
+
+  /** Onde o usuário está, para a previsão do tempo. Só vai se ele permitir. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizacaoDto)
+  localizacao?: LocalizacaoDto;
+
+  /** Usado quando a mensagem pede para salvar o look ("sim", "salva esse"). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LookMostradoDto)
+  lookMostrado?: LookMostradoDto;
 }

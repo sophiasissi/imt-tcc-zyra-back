@@ -1,23 +1,47 @@
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Peca } from '@prisma/client';
+import { Ocasiao, Peca } from '@prisma/client';
 import OpenAI from 'openai';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
+import {
+  aquecimentoDaPrevisao,
+  ClimaService,
+  descreverPrevisao,
+  DIAS_DE_PREVISAO,
+  hojeNoBrasil,
+  Localizacao,
+} from './clima';
+import {
+  entenderRespostaCurta,
+  perguntaDoLook,
+  RESPOSTA_NAO_SALVAR,
+  RESPOSTA_SALVO,
+  RESPOSTA_SEM_LOOK_PARA_SALVAR,
+} from './conversa';
+import { diaDaConversa, diasAte } from './dia-do-evento';
 import { SugerirLookDto } from './dto/sugerir-look.dto';
-import { interpretarPedido, MensagemHistorico } from './interpretar-pedido';
+import { Intencao, interpretarPedido, MensagemHistorico } from './interpretar-pedido';
+import { LooksSalvosService } from './looks-salvos.service';
 import { contarParaMinimo, mensagemPoucasPecas, montarLook } from './motor';
 import { Papel } from './taxonomia';
 
 export type RespostaLook =
   | { tipo: 'POUCAS_PECAS'; mensagem: string; faltamSuperiores: number; faltamInferiores: number }
-  | { tipo: 'PERGUNTA' | 'FORA_DE_ESCOPO'; mensagem: string }
+  | { tipo: 'PERGUNTA' | 'FORA_DE_ESCOPO' | 'CONVERSA'; mensagem: string }
+  | { tipo: 'SALVO'; mensagem: string; lookId: string }
   | { tipo: 'SEM_LOOK'; mensagem: string; avisos: string[] }
   | {
       tipo: 'LOOK';
       mensagem: string;
+      /** De onde veio o clima do look ("Considerei a previsão para amanhã..."). */
+      clima: string | null;
       avisos: string[];
+      /** Pergunta curta para o fim da resposta: ocasião, clima ou salvar. */
+      pergunta: string;
+      /** Ocasião entendida no pedido; o app guarda para quando o look for salvo. */
+      ocasiao: Ocasiao | null;
       pecas: (Omit<Peca, 'imagemS3Key'> & { imagemUrl: string; papel: Papel })[];
     };
 
@@ -34,6 +58,8 @@ export class LooksService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly config: ConfigService,
+    private readonly clima: ClimaService,
+    private readonly looksSalvos: LooksSalvosService,
   ) {}
 
   /**
@@ -41,6 +67,8 @@ export class LooksService {
    *   1. confere se o armário tem o mínimo de peças (sem gastar tokens);
    *   2. a IA transforma a mensagem em filtros (única chamada paga);
    *   3. o motor escolhe as peças e monta o texto, sem IA.
+   *
+   * "Sim" depois de "Quer salvar esse look?" é resolvido sem a IA.
    */
   async sugerir(cognitoSub: string, dto: SugerirLookDto): Promise<RespostaLook> {
     const usuario = await this.prisma.usuario.findUnique({ where: { cognitoSub } });
@@ -63,7 +91,18 @@ export class LooksService {
       };
     }
 
-    const intencao = await this.interpretar(dto.mensagem, dto.historico ?? []);
+    const historico = dto.historico ?? [];
+    const respostaCurta = entenderRespostaCurta(dto.mensagem, historico);
+
+    if (respostaCurta === 'SALVAR') {
+      return this.salvarLookMostrado(cognitoSub, dto);
+    }
+
+    if (respostaCurta === 'NAO_SALVAR') {
+      return { tipo: 'CONVERSA', mensagem: RESPOSTA_NAO_SALVAR };
+    }
+
+    let intencao = await this.interpretar(dto.mensagem, historico);
 
     if (intencao.tipo === 'ESCLARECER') {
       return { tipo: 'PERGUNTA', mensagem: intencao.pergunta ?? PERGUNTA_PADRAO };
@@ -73,6 +112,18 @@ export class LooksService {
       return { tipo: 'FORA_DE_ESCOPO', mensagem: FORA_DE_ESCOPO };
     }
 
+    // Clima: o que o usuário disse vale mais que a previsão.
+    const {
+      intencao: comClima,
+      clima,
+      avisoClima,
+    } = await this.aplicarPrevisao(
+      intencao,
+      diasAte(diaDaConversa(dto.mensagem, historico), hojeNoBrasil()),
+      dto.localizacao,
+    );
+    intencao = comClima;
+
     const resultado = montarLook(pecas, intencao, {
       pecasAnteriores: dto.pecasAnteriores,
       pecasRecentes: dto.pecasRecentes,
@@ -80,7 +131,11 @@ export class LooksService {
 
     if (resultado.status !== 'LOOK') {
       return resultado.status === 'SEM_LOOK'
-        ? { tipo: 'SEM_LOOK', mensagem: resultado.mensagem, avisos: resultado.avisos }
+        ? {
+            tipo: 'SEM_LOOK',
+            mensagem: resultado.mensagem,
+            avisos: [...(avisoClima ? [avisoClima] : []), ...resultado.avisos],
+          }
         : {
             tipo: 'POUCAS_PECAS',
             mensagem: resultado.mensagem,
@@ -99,10 +154,79 @@ export class LooksService {
 
     return {
       tipo: 'LOOK',
-      mensagem: resultado.descricao,
-      avisos: resultado.avisos,
+      // Numa troca, só o que mudou: repetir o look inteiro deixava a conversa
+      // pesada.
+      mensagem: resultado.descricaoDaTroca
+        ? `Troquei por ${resultado.descricaoDaTroca}.`
+        : resultado.descricao,
+      ocasiao: intencao.ocasiao,
+      // A previsão só aparece quando muda (de hoje para sábado, por exemplo):
+      // repetida em toda mensagem, ela só ocupa espaço.
+      clima: clima && !historico.some((m) => m.texto.includes(clima)) ? clima : null,
+      avisos: [...(avisoClima ? [avisoClima] : []), ...resultado.avisos],
+      pergunta: perguntaDoLook({
+        temOcasiao: intencao.ocasiao !== null,
+        temClima: intencao.aquecimento !== null,
+        historico,
+      }),
       pecas: pecasDoLook,
     };
+  }
+
+  /**
+   * Se o usuário não falou do clima e mandou a localização, usa a previsão do
+   * dia do evento (hoje, se ele não disse). Sem localização ou se a previsão
+   * falhar, o look sai sem clima, como antes.
+   */
+  private async aplicarPrevisao(
+    intencao: Intencao,
+    dias: number | null,
+    localizacao?: Localizacao,
+  ) {
+    const semClima = { intencao, clima: null, avisoClima: null };
+    if (intencao.aquecimento || !localizacao || dias === null) return semClima;
+
+    const hoje = hojeNoBrasil();
+
+    const previsao = await this.clima.previsao(localizacao, dias);
+
+    if (!previsao) {
+      // Só avisa quando o dia está fora do alcance; falha da consulta passa em silêncio.
+      return dias >= DIAS_DE_PREVISAO
+        ? { ...semClima, avisoClima: 'Ainda não tem previsão do tempo para esse dia.' }
+        : semClima;
+    }
+
+    return {
+      intencao: { ...intencao, aquecimento: aquecimentoDaPrevisao(previsao) },
+      clima: descreverPrevisao(previsao, hoje),
+      avisoClima: null,
+    };
+  }
+
+  /** "Sim" para "Quer salvar esse look?": salva as peças do look que está na tela. */
+  private async salvarLookMostrado(cognitoSub: string, dto: SugerirLookDto): Promise<RespostaLook> {
+    const pecaIds = dto.pecasAnteriores ?? [];
+
+    if (!pecaIds.length) {
+      return { tipo: 'CONVERSA', mensagem: RESPOSTA_SEM_LOOK_PARA_SALVAR };
+    }
+
+    try {
+      // Mesmo nome e ocasião que o popup de saída do app usaria.
+      const look = await this.looksSalvos.salvar(cognitoSub, {
+        pecaIds,
+        nome: dto.lookMostrado?.nome || undefined,
+        ocasiao: dto.lookMostrado?.ocasiao,
+        pedido: dto.lookMostrado?.pedido,
+      });
+      return { tipo: 'SALVO', mensagem: RESPOSTA_SALVO, lookId: look.id };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return { tipo: 'CONVERSA', mensagem: error.message };
+      }
+      throw error;
+    }
   }
 
   /** Separado para os testes trocarem a chamada à OpenAI por uma resposta fixa. */
