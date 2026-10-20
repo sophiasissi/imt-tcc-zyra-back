@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Usuario } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,12 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
  */
 const SEM_DADO_DE_SAUDE = 'PREFIRO_NAO_DIZER';
 
+const EXTENSOES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -25,6 +32,10 @@ export class UsersService {
   ) {}
 
   async getMe(cognitoSub: string) {
+    return this.toResponse(await this.buscarUsuario(cognitoSub));
+  }
+
+  private async buscarUsuario(cognitoSub: string) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { cognitoSub },
     });
@@ -38,11 +49,66 @@ export class UsersService {
     return usuario;
   }
 
+  /** O perfil sem a chave do S3: a foto vai como URL assinada (ou null). */
+  private async toResponse(usuario: Usuario) {
+    const { fotoS3Key, ...dados } = usuario;
+
+    return {
+      ...dados,
+      fotoUrl: fotoS3Key ? await this.s3.getReadUrl(fotoS3Key) : null,
+    };
+  }
+
+  /**
+   * Troca a foto de perfil. A nova vai para o S3 antes de o banco mudar; a
+   * antiga só sai depois, para a pessoa nunca ficar com um link quebrado.
+   */
+  async atualizarFoto(cognitoSub: string, foto: Express.Multer.File) {
+    const usuario = await this.buscarUsuario(cognitoSub);
+    const extensao = EXTENSOES[foto.mimetype] ?? 'jpg';
+    const novaKey = `usuarios/${usuario.id}/perfil/${randomUUID()}.${extensao}`;
+
+    await this.s3.upload(novaKey, foto.buffer, foto.mimetype);
+
+    let atualizado: Usuario;
+    try {
+      atualizado = await this.prisma.usuario.update({
+        where: { id: usuario.id },
+        data: { fotoS3Key: novaKey },
+      });
+    } catch (error) {
+      await this.s3.deleteQuietly(novaKey);
+      throw error;
+    }
+
+    if (usuario.fotoS3Key) {
+      await this.s3.deleteQuietly(usuario.fotoS3Key);
+    }
+
+    return this.toResponse(atualizado);
+  }
+
+  async removerFoto(cognitoSub: string) {
+    const usuario = await this.buscarUsuario(cognitoSub);
+
+    if (!usuario.fotoS3Key) {
+      return this.toResponse(usuario);
+    }
+
+    const atualizado = await this.prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { fotoS3Key: null },
+    });
+    await this.s3.deleteQuietly(usuario.fotoS3Key);
+
+    return this.toResponse(atualizado);
+  }
+
   async updateMe(cognitoSub: string, body: UpdateProfileDto) {
     const consentimento = await this.consentimentoParaSalvar(cognitoSub, body);
 
     try {
-      return await this.prisma.usuario.update({
+      const atualizado = await this.prisma.usuario.update({
         where: { cognitoSub },
         data: {
           dataNascimento: body.dataNascimento ? new Date(body.dataNascimento) : undefined,
@@ -52,6 +118,8 @@ export class UsersService {
           consentimentoSaudeEm: consentimento,
         },
       });
+
+      return await this.toResponse(atualizado);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new NotFoundException(
@@ -114,7 +182,7 @@ export class UsersService {
    * bucket privado e' melhor que uma conta pela metade (fica no log).
    */
   async deleteMe(cognitoSub: string, accessToken: string, senha: string) {
-    const usuario = await this.getMe(cognitoSub);
+    const usuario = await this.buscarUsuario(cognitoSub);
 
     if (!usuario.email) {
       throw new BadRequestException(
@@ -134,7 +202,11 @@ export class UsersService {
         await tx.usuario.delete({ where: { id: usuario.id } });
         await this.authService.excluirContaNoCognito(accessToken);
 
-        return pecas.map((peca) => peca.imagemS3Key);
+        // A foto de perfil sai junto com as das peças.
+        return [
+          ...pecas.map((peca) => peca.imagemS3Key),
+          ...(usuario.fotoS3Key ? [usuario.fotoS3Key] : []),
+        ];
       },
       // O Cognito responde em menos de um segundo; a folga e' para rede lenta.
       { timeout: 15_000 },

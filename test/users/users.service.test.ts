@@ -16,6 +16,7 @@ type UsuarioFake = {
   email: string | null;
   tipoDaltonismo: string | null;
   consentimentoSaudeEm: Date | null;
+  fotoS3Key?: string | null;
 };
 
 /**
@@ -30,7 +31,8 @@ function criarBanco(usuario: UsuarioFake | null, pecas: string[] = []) {
       findUnique: async () => estado.usuario,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         estado.updates.push(data);
-        return { ...estado.usuario, ...data };
+        estado.usuario = { ...estado.usuario!, ...data };
+        return estado.usuario;
       },
       delete: async () => {
         estado.usuario = null;
@@ -65,6 +67,7 @@ function criarServico(
 ) {
   const passos: string[] = [];
   const fotosApagadas: string[] = [];
+  const fotosEnviadas: string[] = [];
 
   const auth = {
     confirmarSenha: async () => {
@@ -80,6 +83,10 @@ function criarServico(
     deleteQuietly: async (key: string) => {
       fotosApagadas.push(key);
     },
+    upload: async (key: string) => {
+      fotosEnviadas.push(key);
+    },
+    getReadUrl: async (key: string) => `https://s3.exemplo/${key}`,
   };
 
   const servico = new UsersService(
@@ -88,7 +95,7 @@ function criarServico(
     s3 as unknown as S3Service,
   );
 
-  return { servico, passos, fotosApagadas };
+  return { servico, passos, fotosApagadas, fotosEnviadas };
 }
 
 function usuario(extra: Partial<UsuarioFake> = {}): UsuarioFake {
@@ -207,5 +214,50 @@ describe('UsersService.deleteMe', () => {
     assert.ok(banco.estado.usuario, 'o usuário deveria continuar no banco');
     assert.equal(banco.estado.pecas.length, 2);
     assert.deepEqual(fotosApagadas, []);
+  });
+});
+
+describe('UsersService: foto de perfil', () => {
+  const foto = { buffer: Buffer.from('x'), mimetype: 'image/jpeg' } as Express.Multer.File;
+
+  it('envia a nova, grava no perfil, apaga a antiga e devolve só a URL', async () => {
+    const banco = criarBanco(usuario({ fotoS3Key: 'usuarios/u1/perfil/antiga.jpg' }));
+    const { servico, fotosEnviadas, fotosApagadas } = criarServico(banco);
+
+    const r = await servico.atualizarFoto('sub', foto);
+
+    assert.equal(fotosEnviadas.length, 1);
+    assert.match(fotosEnviadas[0], /^usuarios\/u1\/perfil\/[0-9a-f-]+\.jpg$/);
+    assert.equal(banco.estado.usuario?.fotoS3Key, fotosEnviadas[0]);
+    assert.deepEqual(fotosApagadas, ['usuarios/u1/perfil/antiga.jpg']);
+    assert.equal(r.fotoUrl, `https://s3.exemplo/${fotosEnviadas[0]}`);
+    assert.ok(!('fotoS3Key' in r), 'a chave do S3 não vai para o app');
+  });
+
+  it('remove a foto: sai do perfil e do S3', async () => {
+    const banco = criarBanco(usuario({ fotoS3Key: 'usuarios/u1/perfil/a.jpg' }));
+    const { servico, fotosApagadas } = criarServico(banco);
+
+    const r = await servico.removerFoto('sub');
+
+    assert.equal(r.fotoUrl, null);
+    assert.equal(banco.estado.usuario?.fotoS3Key, null);
+    assert.deepEqual(fotosApagadas, ['usuarios/u1/perfil/a.jpg']);
+  });
+
+  it('o perfil sem foto vem com fotoUrl null', async () => {
+    const { servico } = criarServico(criarBanco(usuario()));
+    assert.equal((await servico.getMe('sub')).fotoUrl, null);
+  });
+
+  it('excluir a conta também apaga a foto de perfil', async () => {
+    const banco = criarBanco(usuario({ fotoS3Key: 'usuarios/u1/perfil/a.jpg' }), [
+      'usuarios/u1/roupas/a.jpg',
+    ]);
+    const { servico, fotosApagadas } = criarServico(banco);
+
+    await servico.deleteMe('sub', 'token', 'Senha123!');
+
+    assert.deepEqual(fotosApagadas, ['usuarios/u1/roupas/a.jpg', 'usuarios/u1/perfil/a.jpg']);
   });
 });
