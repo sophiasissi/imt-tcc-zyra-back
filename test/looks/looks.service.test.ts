@@ -28,6 +28,7 @@ function peca(
     ocasioes: ['DIA_A_DIA'],
     aquecimento: 'MEDIO',
     material: null,
+    manga: null,
     corNome,
     hex,
     colorAddSymbol,

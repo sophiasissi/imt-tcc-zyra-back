@@ -1,4 +1,4 @@
-import { Categoria, Peca } from '@prisma/client';
+import { Material, Peca } from '@prisma/client';
 
 import {
   CorPeca,
@@ -9,8 +9,10 @@ import {
   eNeutra,
 } from './cor';
 import { Intencao, ParteDoLook, PecaDesejada } from './interpretar-pedido';
+import { NOME_CATEGORIA, NOME_MATERIAL, nomeDaPeca } from './nome-da-peca';
 import { compatibilidade, notaDeOcasiao, SUGESTAO_DE_CADASTRO } from './ocasioes';
 import {
+  CATEGORIAS_PARECIDAS,
   Formalidade,
   FORMALIDADE_DO_ESTILO,
   NIVEL_FORMALIDADE,
@@ -34,6 +36,7 @@ export type PecaMotor = Pick<
   | 'ocasioes'
   | 'aquecimento'
   | 'material'
+  | 'manga'
   | 'corNome'
   | 'hex'
   | 'colorAddSymbol'
@@ -63,20 +66,6 @@ export type OpcoesMotor = {
   pecasRecentes?: string[];
   /** Fonte de aleatoriedade, injetável nos testes. */
   aleatorio?: () => number;
-};
-
-const NOME_CATEGORIA: Record<Categoria, string> = {
-  CAMISETA: 'Camiseta',
-  CAMISA: 'Camisa',
-  MOLETOM: 'Moletom',
-  JAQUETA: 'Jaqueta',
-  BLAZER: 'Blazer',
-  CALCA: 'Calça',
-  SHORT: 'Short',
-  SAIA: 'Saia',
-  VESTIDO: 'Vestido',
-  TENIS: 'Tênis',
-  SAPATO: 'Sapato',
 };
 
 const NOME_OCASIAO: Record<string, string> = {
@@ -159,7 +148,9 @@ export function mensagemPoucasPecas(faltamSuperiores: number, faltamInferiores: 
 
 function descreverPedido(pedido: PecaDesejada) {
   const partes = [pedido.categoria ? NOME_CATEGORIA[pedido.categoria].toLowerCase() : 'peça'];
-  if (pedido.material) partes.push(pedido.material === 'JEANS' ? 'jeans' : 'de couro');
+  if (pedido.material) {
+    partes.push(pedido.material === 'JEANS' ? 'jeans' : `de ${NOME_MATERIAL[pedido.material]}`);
+  }
   if (pedido.cor) {
     partes.push(
       `${pedido.cor.familia.toLowerCase()}${pedido.cor.tom ? ` ${pedido.cor.tom.toLowerCase()}` : ''}`,
@@ -172,7 +163,9 @@ function juntar(itens: string[]) {
   return itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens.at(-1)}` : itens[0];
 }
 
-const CATEGORIAS_FEMININAS: Categoria[] = ['CAMISETA', 'CAMISA', 'JAQUETA', 'CALCA', 'SAIA'];
+// O gênero vem da primeira palavra do nome, e não da categoria: a jaqueta de
+// moletom se chama "Casaco", e a camiseta sem manga, "Regata".
+const NOMES_FEMININOS = ['Camiseta', 'Camisa', 'Blusa', 'Regata', 'Jaqueta', 'Calça', 'Saia'];
 
 const FEMININO: Record<string, string> = {
   Preto: 'Preta',
@@ -186,8 +179,8 @@ const FEMININO: Record<string, string> = {
 };
 
 /** "Calça Preta", "Jaqueta Vermelha Clara"; verde, azul, laranja e cinza não mudam. */
-function corConcordando(corNome: string, categoria: Categoria) {
-  if (!CATEGORIAS_FEMININAS.includes(categoria)) return corNome;
+function corConcordando(corNome: string, nomeDaPecaNoLook: string) {
+  if (!NOMES_FEMININOS.includes(nomeDaPecaNoLook.split(' ')[0])) return corNome;
   return corNome
     .split(' ')
     .map((palavra) => FEMININO[palavra] ?? palavra)
@@ -195,7 +188,8 @@ function corConcordando(corNome: string, categoria: Categoria) {
 }
 
 function descreverPeca(peca: PecaMotor) {
-  return `${NOME_CATEGORIA[peca.categoria]} ${corConcordando(peca.corNome, peca.categoria)}`;
+  const nome = nomeDaPeca(peca);
+  return `${nome} ${corConcordando(peca.corNome, nome)}`;
 }
 
 /**
@@ -203,11 +197,23 @@ function descreverPeca(peca: PecaMotor) {
  * bater, a mais próxima pelo hex, com aviso.
  */
 function resolverPedido(pedido: PecaDesejada, pecas: PecaRica[], avisos: string[]): PecaRica[] {
-  const compativeis = pecas.filter(
-    (p) =>
-      (!pedido.categoria || p.categoria === pedido.categoria) &&
-      (!pedido.material || p.material === pedido.material),
-  );
+  const doMaterial = pecas.filter((p) => !pedido.material || p.material === pedido.material);
+  let compativeis = doMaterial.filter((p) => !pedido.categoria || p.categoria === pedido.categoria);
+
+  // "Minha blusa preta" pode estar salva como camiseta: sem nenhuma peça da
+  // categoria pedida que sirva, procura nas parecidas.
+  const pedidaEhParecida = pedido.categoria && CATEGORIAS_PARECIDAS.includes(pedido.categoria);
+  const serve = (p: PecaRica) => !pedido.cor || corBateComPedido(pedido.cor, p.cor);
+  if (pedidaEhParecida && !compativeis.some(serve)) {
+    const parecidas = doMaterial.filter((p) => CATEGORIAS_PARECIDAS.includes(p.categoria));
+    if (parecidas.some(serve)) compativeis = parecidas;
+  }
+
+  // "Meu moletom" pode ser o casaco de moletom com zíper, salvo como jaqueta.
+  if (pedido.categoria === 'MOLETOM' && !compativeis.some(serve)) {
+    const casacos = doMaterial.filter((p) => p.categoria === 'JAQUETA' && p.material === 'MOLETOM');
+    if (casacos.some(serve)) compativeis = casacos;
+  }
 
   if (!pedido.cor) {
     if (!compativeis.length) avisos.push(`Não achei ${descreverPedido(pedido)} no seu armário.`);
@@ -282,6 +288,9 @@ function notaDaPeca(
     const nivel = { LEVE: 0, MEDIO: 1, QUENTE: 2 };
     nota -= 1.5 * Math.abs(nivel[peca.aquecimento] - nivel[intencao.aquecimento]);
   }
+  // Manga longa no calor e sem manga no frio pesam contra, sem proibir.
+  if (intencao.aquecimento === 'LEVE' && peca.manga === 'LONGA') nota -= 1;
+  if (intencao.aquecimento === 'QUENTE' && peca.manga === 'SEM_MANGA') nota -= 1.5;
   if (intencao.paletaNeutra && !peca.neutra) nota -= 10;
   if (anteriores.has(peca.id)) nota -= 2;
   else if (recentes.has(peca.id)) nota -= 1;
@@ -289,9 +298,27 @@ function notaDaPeca(
   return nota;
 }
 
+/**
+ * Tecidos que não vão juntos no mesmo look. Por enquanto só o soft (pijama,
+ * pelúcia), que não combina com peça de sair. As próximas regras de material
+ * entram aqui, ou no arquivo de regras por cenário do Gustavo.
+ */
+const MATERIAIS_QUE_NAO_COMBINAM: [Material, Material[]][] = [
+  ['SOFT', ['JEANS', 'COURO', 'ALFAIATARIA', 'CETIM', 'LINHO']],
+];
+
+function materiaisNaoCombinam(look: PecaRica[]) {
+  const materiais = new Set(look.map((p) => p.material).filter((m): m is Material => !!m));
+  return MATERIAIS_QUE_NAO_COMBINAM.some(
+    ([material, outros]) => materiais.has(material) && outros.some((m) => materiais.has(m)),
+  );
+}
+
 /** Regras gerais de harmonia, valem para qualquer pessoa. */
 function notaDeHarmonia(look: PecaRica[]) {
   let nota = 0;
+
+  if (materiaisNaoCombinam(look)) nota -= 10;
 
   // No máximo duas cores fortes; neutros combinam com tudo.
   const cromaticas = new Set(look.filter((p) => !p.neutra).map((p) => p.cor.familia));

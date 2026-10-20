@@ -66,7 +66,7 @@
   {"id": "cor-creme", "mensagem": "com a calça creme", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CALCA", "cor": "*"}]}},
   {"id": "cor-nude", "mensagem": "com o sapato nude", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "SAPATO", "cor": "*"}]}},
   {"id": "cor-algo-amarelo", "mensagem": "quero usar algo amarelo", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": null, "cor": {"familia": "AMARELO", "tom": null}}]}},
-  {"id": "cor-rosa-choque", "mensagem": "minha blusinha rosa choque", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CAMISETA", "cor": {"familia": "VERMELHO", "tom": "*"}}]}},
+  {"id": "cor-rosa-choque", "mensagem": "minha blusinha rosa choque", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "BLUSA", "cor": {"familia": "VERMELHO", "tom": "*"}}]}},
   {"id": "cor-preto-e-branco", "mensagem": "com o tênis preto e branco", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "TENIS", "cor": "*"}]}},
   {"id": "cor-duas-pecas", "mensagem": "quero usar minha camisa branca e a calça preta", "esperado": {"tipo": "LOOK", "incluir": [{"categoria": "CAMISA", "cor": {"familia": "BRANCO", "tom": null}}, {"categoria": "CALCA", "cor": {"familia": "PRETO", "tom": null}}]}},
 

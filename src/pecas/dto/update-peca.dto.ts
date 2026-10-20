@@ -1,4 +1,4 @@
-import { Aquecimento, Categoria, Estampa, Estilo, Material, Ocasiao } from '@prisma/client';
+import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } from '@prisma/client';
 import {
   ArrayUnique,
   IsArray,
@@ -22,6 +22,10 @@ export class UpdatePecaDto {
   @SeEnviado
   @IsEnum(Categoria)
   categoria?: Categoria;
+
+  @IsOptional()
+  @IsEnum(Manga)
+  manga?: Manga | null;
 
   @IsOptional()
   @IsEnum(Estilo)
