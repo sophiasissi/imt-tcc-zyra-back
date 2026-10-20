@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 
 import { CognitoAuthGuard } from '../auth/cognito-auth.guard';
+import { CombinarService } from './combinar.service';
+import { CombinarDto } from './dto/combinar.dto';
 import { SalvarLookDto } from './dto/salvar-look.dto';
 import { SugerirLookDto } from './dto/sugerir-look.dto';
 import { LooksSalvosService } from './looks-salvos.service';
@@ -29,12 +31,20 @@ export class LooksController {
   constructor(
     private readonly looksService: LooksService,
     private readonly looksSalvosService: LooksSalvosService,
+    private readonly combinarService: CombinarService,
   ) {}
 
   @Post('sugerir')
   @HttpCode(200)
   sugerir(@Req() req: AuthenticatedRequest, @Body() body: SugerirLookDto) {
     return this.looksService.sugerir(req.user.cognitoSub, body);
+  }
+
+  /** Peças do armário que combinam com a que acabou de ser fotografada. */
+  @Post('combinar')
+  @HttpCode(200)
+  combinar(@Req() req: AuthenticatedRequest, @Body() body: CombinarDto) {
+    return this.combinarService.combinar(req.user.cognitoSub, body);
   }
 
   @Post()

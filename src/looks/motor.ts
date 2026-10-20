@@ -1,4 +1,4 @@
-import { Material, Peca } from '@prisma/client';
+import { Categoria, Material, Peca } from '@prisma/client';
 
 import {
   CorPeca,
@@ -175,7 +175,16 @@ function juntar(itens: string[]) {
 
 // O gênero vem da primeira palavra do nome, e não da categoria: a jaqueta de
 // moletom se chama "Casaco", e a camiseta sem manga, "Regata".
-const NOMES_FEMININOS = ['Camiseta', 'Camisa', 'Blusa', 'Regata', 'Jaqueta', 'Calça', 'Saia'];
+const NOMES_FEMININOS = [
+  'Camiseta',
+  'Camisa',
+  'Blusa',
+  'Regata',
+  'Jaqueta',
+  'Calça',
+  'Saia',
+  'Sandália',
+];
 
 const FEMININO: Record<string, string> = {
   Preto: 'Preta',
@@ -206,6 +215,20 @@ function descreverPeca(peca: PecaMotor) {
  * Peças que atendem a um "quero usar X". Primeiro pelo nome da cor; se nenhuma
  * bater, a mais próxima pelo hex, com aviso.
  */
+/**
+ * Peças de cima que, pedidas como camada ("põe uma blusa por cima"), vão por cima
+ * da que já está no look, e o que tentar se a pessoa não tiver a pedida.
+ */
+const AGASALHOS_POR_PEDIDO: Partial<Record<string, Categoria[]>> = {
+  BLUSA: ['BLUSA', 'MOLETOM', 'JAQUETA'],
+  MOLETOM: ['MOLETOM', 'BLUSA', 'JAQUETA'],
+  CAMISA: ['CAMISA'],
+};
+
+// Blusa e moletom são sinônimos para quem pede um agasalho: trocar um pelo
+// outro não precisa de aviso. Ir para a jaqueta precisa.
+const SINONIMOS_DE_AGASALHO: Categoria[] = ['BLUSA', 'MOLETOM'];
+
 function resolverPedido(pedido: PecaDesejada, pecas: PecaRica[], avisos: string[]): PecaRica[] {
   const doMaterial = pecas.filter((p) => !pedido.material || p.material === pedido.material);
   let compativeis = doMaterial.filter((p) => !pedido.categoria || p.categoria === pedido.categoria);
@@ -407,10 +430,51 @@ export function montarLook(
     pecas = pecas.filter((p) => p.aquecimento !== 'QUENTE');
   }
 
+  // "Põe uma blusa / um moletom por cima": com um look na tela, a peça de cima
+  // pedida como camada vai por cima da que já está, e não no lugar dela. No
+  // Brasil, "blusa" nesse sentido é agasalho; sem blusa, vale moletom ou jaqueta.
+  const pedeCamada = intencao.trocar.includes('CAMADA') && doLookAnterior.length > 0;
+  const resolverComoCamada = (pedido: PecaDesejada) => {
+    const tentativas = AGASALHOS_POR_PEDIDO[pedido.categoria ?? ''] ?? [pedido.categoria];
+    for (const [i, categoria] of tentativas.entries()) {
+      const semAviso: string[] = [];
+      // Só a categoria tentada e fora do look da tela: sem isso, "blusa" caía
+      // nas parecidas e achava a própria camiseta do look.
+      const daCategoria = pecas.filter((p) => p.categoria === categoria && !anteriores.has(p.id));
+      const achadas = resolverPedido({ ...pedido, categoria }, daCategoria, semAviso);
+      if (achadas.length) {
+        avisos.push(...semAviso);
+        // Pediu moletom e só tem jaqueta: a resposta diz, para não parecer engano.
+        const sinonimo =
+          pedido.categoria &&
+          SINONIMOS_DE_AGASALHO.includes(pedido.categoria) &&
+          categoria &&
+          SINONIMOS_DE_AGASALHO.includes(categoria);
+        if (i > 0 && categoria && !sinonimo) {
+          avisos.push(
+            `Não achei ${descreverPedido(pedido)} no seu armário; coloquei ${NOME_CATEGORIA[categoria].toLowerCase()}.`,
+          );
+        }
+        // Peça de cima vestida por cima de outra: no look, ela é a camada.
+        const camadas = achadas.map((p) =>
+          p.papel === 'SUPERIOR' ? { ...p, papel: 'SOBREPOSICAO' as const } : p,
+        );
+        pecas = pecas.map((p) => camadas.find((c) => c.id === p.id) ?? p);
+        return camadas;
+      }
+    }
+    avisos.push(`Não achei ${descreverPedido(pedido)} no seu armário.`);
+    return [];
+  };
+
   // "Quero usar X" e as peças mantidas do look anterior entram mesmo fora da
   // ocasião: foi o usuário quem escolheu.
   const obrigatorias = [
-    ...intencao.incluir.map((pedido) => resolverPedido(pedido, pecas, avisos)),
+    ...intencao.incluir.map((pedido) =>
+      pedeCamada && pedido.categoria && AGASALHOS_POR_PEDIDO[pedido.categoria]
+        ? resolverComoCamada(pedido)
+        : resolverPedido(pedido, pecas, avisos),
+    ),
     ...fixas.map((p) => [p]),
   ].filter((lista) => lista.length > 0);
   const pedidas = new Set(obrigatorias.flat());

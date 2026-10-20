@@ -282,3 +282,45 @@ describe('harmonia', () => {
     assert.ok(new Set(fortes.map((p) => p.colorAddSymbol)).size <= 2);
   });
 });
+
+describe('acrescentar camada ao look da tela', () => {
+  const lookNaTela = [camisetaBranca.id, calcaJeans.id, tenisBranco.id];
+  const pedido = (categoria: PecaMotor['categoria']) =>
+    intencao({ trocar: ['CAMADA'], incluir: [{ categoria, cor: null, material: null }] });
+
+  it('"põe um moletom por cima" mantém a camiseta e põe o moletom como camada', () => {
+    const r = montarLook(armario, pedido('MOLETOM'), { pecasAnteriores: lookNaTela });
+    assert.equal(r.status, 'LOOK');
+    if (r.status !== 'LOOK') return;
+    const ids = r.pecas.map((p) => p.id);
+    for (const id of lookNaTela) assert.ok(ids.includes(id), 'nenhuma peça da tela sai');
+    assert.deepEqual(
+      r.pecas.find((p) => p.id === moletomCinza.id),
+      { id: moletomCinza.id, papel: 'SOBREPOSICAO' },
+    );
+    assert.equal(r.pecas.length, 4);
+  });
+
+  it('"blusa" sem blusa no armário vira moletom ou jaqueta, sem trocar a camiseta', () => {
+    const r = montarLook(armario, pedido('BLUSA'), { pecasAnteriores: lookNaTela });
+    assert.equal(r.status, 'LOOK');
+    if (r.status !== 'LOOK') return;
+    assert.ok(r.pecas.some((p) => p.id === camisetaBranca.id));
+    assert.ok(r.pecas.some((p) => p.papel === 'SOBREPOSICAO'));
+    // Blusa e moletom são sinônimos: usar o moletom não gera aviso.
+    assert.ok(r.pecas.some((p) => p.id === moletomCinza.id));
+    assert.ok(!r.avisos.some((a) => /Não achei/.test(a)), r.avisos.join(' | '));
+  });
+
+  it('sem blusa nem moletom, usa a jaqueta e avisa', () => {
+    const semMoletom = armario.filter((p) => p.id !== moletomCinza.id);
+    const r = montarLook(semMoletom, pedido('BLUSA'), { pecasAnteriores: lookNaTela });
+    assert.equal(r.status, 'LOOK');
+    if (r.status !== 'LOOK') return;
+    assert.ok(r.pecas.some((p) => p.id === jaquetaCouro.id));
+    assert.ok(
+      r.avisos.some((a) => /coloquei jaqueta/.test(a)),
+      r.avisos.join(' | '),
+    );
+  });
+});

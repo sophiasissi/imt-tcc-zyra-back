@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import { coresDaPeca } from './cor-da-peca';
+import { chaveDaMiniatura, fotosDaPeca, gerarMiniatura } from './fotos-da-peca';
 import { CreatePecaDto } from './dto/create-peca.dto';
 import { UpdatePecaDto } from './dto/update-peca.dto';
 import { CorDaPeca, VisionService } from './vision.service';
@@ -52,6 +53,10 @@ export class PecasService {
 
     await this.s3.upload(imagemS3Key, foto.buffer, foto.mimetype);
 
+    // A miniatura não pode impedir o cadastro: se falhar, o app mostra a foto
+    // inteira no card.
+    const imagemMiniS3Key = await this.enviarMiniatura(imagemS3Key, foto.buffer);
+
     let peca: Peca;
 
     try {
@@ -61,6 +66,7 @@ export class PecasService {
         data: {
           usuarioId: usuario.id,
           imagemS3Key,
+          imagemMiniS3Key,
           categoria: analise.category,
           manga: analise.sleeve,
           estilo: analise.style,
@@ -73,10 +79,23 @@ export class PecasService {
       });
     } catch (error) {
       await this.s3.deleteQuietly(imagemS3Key);
+      if (imagemMiniS3Key) await this.s3.deleteQuietly(imagemMiniS3Key);
       throw error;
     }
 
     return this.toResponse(peca);
+  }
+
+  private async enviarMiniatura(imagemS3Key: string, foto: Buffer) {
+    const chave = chaveDaMiniatura(imagemS3Key);
+
+    try {
+      await this.s3.upload(chave, await gerarMiniatura(foto), 'image/webp');
+      return chave;
+    } catch (error) {
+      console.error('[Peças] Não foi possível gerar a miniatura:', error);
+      return null;
+    }
   }
 
   async findAll(cognitoSub: string) {
@@ -121,6 +140,7 @@ export class PecasService {
       this.prisma.peca.delete({ where: { id: peca.id } }),
     ]);
     await this.s3.deleteQuietly(peca.imagemS3Key);
+    if (peca.imagemMiniS3Key) await this.s3.deleteQuietly(peca.imagemMiniS3Key);
 
     return { message: 'Peça removida do seu closet.', looksRemovidos: looks.count };
   }
@@ -165,11 +185,11 @@ export class PecasService {
   }
 
   private async toResponse(peca: PecaComLooks) {
-    const { imagemS3Key, _count, ...dados } = peca;
+    const { imagemS3Key, imagemMiniS3Key, _count, ...dados } = peca;
 
     return {
       ...dados,
-      imagemUrl: await this.s3.getReadUrl(imagemS3Key),
+      ...(await fotosDaPeca(this.s3, { imagemS3Key, imagemMiniS3Key })),
       // Peca recem-cadastrada ainda nao esta em nenhum look.
       totalLooks: _count?.looks ?? 0,
     };

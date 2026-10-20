@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Ocasiao, Peca } from '@prisma/client';
+import { Categoria, Ocasiao, Peca } from '@prisma/client';
 import OpenAI from 'openai';
 
+import { FotosDaPeca, fotosDaPeca } from '../pecas/fotos-da-peca';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import {
@@ -15,17 +16,23 @@ import {
 } from './clima';
 import {
   entenderRespostaCurta,
+  falaDeCor,
+  pedeParaAcrescentar,
   perguntaDoLook,
   RESPOSTA_NAO_SALVAR,
   RESPOSTA_SALVO,
   RESPOSTA_SEM_LOOK_PARA_SALVAR,
 } from './conversa';
+import { lerSimbolo } from './cor';
 import { diaDaConversa, diasAte } from './dia-do-evento';
 import { SugerirLookDto } from './dto/sugerir-look.dto';
 import { Intencao, interpretarPedido, MensagemHistorico } from './interpretar-pedido';
 import { LooksSalvosService } from './looks-salvos.service';
 import { contarParaMinimo, mensagemPoucasPecas, montarLook } from './motor';
 import { Papel } from './taxonomia';
+
+/** Peças que, pedidas com um look na tela, vão por cima dele. */
+const CATEGORIAS_DE_AGASALHO: Categoria[] = ['BLUSA', 'MOLETOM', 'JAQUETA', 'BLAZER'];
 
 export type RespostaLook =
   | { tipo: 'POUCAS_PECAS'; mensagem: string; faltamSuperiores: number; faltamInferiores: number }
@@ -42,7 +49,7 @@ export type RespostaLook =
       pergunta: string;
       /** Ocasião entendida no pedido; o app guarda para quando o look for salvo. */
       ocasiao: Ocasiao | null;
-      pecas: (Omit<Peca, 'imagemS3Key'> & { imagemUrl: string; papel: Papel })[];
+      pecas: (Omit<Peca, 'imagemS3Key' | 'imagemMiniS3Key'> & FotosDaPeca & { papel: Papel })[];
     };
 
 const FORA_DE_ESCOPO =
@@ -104,6 +111,36 @@ export class LooksService {
 
     let intencao = await this.interpretar(dto.mensagem, historico);
 
+    // "Quero uma blusa também" com um look na tela: acrescenta a camada e
+    // mantém o resto, em vez de montar outro look com a blusa no lugar.
+    const agasalhoPedido = intencao.incluir.some(
+      (p) => p.categoria && CATEGORIAS_DE_AGASALHO.includes(p.categoria),
+    );
+    if (
+      dto.pecasAnteriores?.length &&
+      !intencao.trocar.length &&
+      agasalhoPedido &&
+      pedeParaAcrescentar(dto.mensagem)
+    ) {
+      intencao = { ...intencao, trocar: ['CAMADA'] };
+    }
+
+    // A IA às vezes copia a cor do look da tela para a peça pedida ("quero um
+    // moletom também", depois de uma camiseta cinza, virava "moletom cinza").
+    // Cor que a mensagem não cita e que é de uma peça da tela sai do pedido.
+    if (dto.pecasAnteriores?.length && !falaDeCor(dto.mensagem)) {
+      const anteriores = new Set(dto.pecasAnteriores);
+      const coresDaTela = new Set(
+        pecas.filter((p) => anteriores.has(p.id)).map((p) => lerSimbolo(p.colorAddSymbol).familia),
+      );
+      intencao = {
+        ...intencao,
+        incluir: intencao.incluir.map((pedido) =>
+          pedido.cor && coresDaTela.has(pedido.cor.familia) ? { ...pedido, cor: null } : pedido,
+        ),
+      };
+    }
+
     if (intencao.tipo === 'ESCLARECER') {
       return { tipo: 'PERGUNTA', mensagem: intencao.pergunta ?? PERGUNTA_PADRAO };
     }
@@ -147,17 +184,26 @@ export class LooksService {
     const porId = new Map(pecas.map((p) => [p.id, p]));
     const pecasDoLook = await Promise.all(
       resultado.pecas.map(async ({ id, papel }) => {
-        const { imagemS3Key, ...dados } = porId.get(id)!;
-        return { ...dados, papel, imagemUrl: await this.s3.getReadUrl(imagemS3Key) };
+        const { imagemS3Key, imagemMiniS3Key, ...dados } = porId.get(id)!;
+        return {
+          ...dados,
+          papel,
+          ...(await fotosDaPeca(this.s3, { imagemS3Key, imagemMiniS3Key })),
+        };
       }),
     );
+
+    // Acréscimo ("põe uma jaqueta"): todas as peças da tela continuam no look.
+    const manteveOLook =
+      Boolean(dto.pecasAnteriores?.length) &&
+      dto.pecasAnteriores!.every((id) => resultado.pecas.some((p) => p.id === id));
 
     return {
       tipo: 'LOOK',
       // Numa troca, só o que mudou: repetir o look inteiro deixava a conversa
       // pesada.
       mensagem: resultado.descricaoDaTroca
-        ? `Troquei por ${resultado.descricaoDaTroca}.`
+        ? `${manteveOLook ? 'Acrescentei' : 'Troquei por'} ${resultado.descricaoDaTroca}.`
         : resultado.descricao,
       ocasiao: intencao.ocasiao,
       // A previsão só aparece quando muda (de hoje para sábado, por exemplo):

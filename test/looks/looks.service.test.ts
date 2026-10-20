@@ -30,6 +30,7 @@ function peca(
     id: `00000000-0000-4000-8000-${String(++proximoId).padStart(12, '0')}`,
     usuarioId: 'usuario-1',
     imagemS3Key: `usuarios/usuario-1/roupas/${proximoId}.jpg`,
+    imagemMiniS3Key: null,
     categoria,
     estilo: 'CASUAL',
     estampa: 'LISO',
@@ -324,5 +325,46 @@ describe('LooksService.sugerir', () => {
     });
     await servico.sugerir('sub', { mensagem: 'monta um look' });
     assert.deepEqual(servico.consultasClima, []);
+  });
+
+  it('acrescentar uma jaqueta mantém o look e diz "Acrescentei"; a cor copiada da tela sai', async () => {
+    const jaqueta = peca('JAQUETA', 'Vermelho', 'COLORADD_VERMELHO', '#B22222');
+    const pecas = [...armarioCompleto, jaqueta];
+    const naTela = [armarioCompleto[0].id, armarioCompleto[5].id, armarioCompleto[10].id];
+    // A IA copiou o branco da camiseta da tela para a jaqueta pedida.
+    const servico = criarServico(
+      pecas,
+      intencao({
+        trocar: ['CAMADA'],
+        incluir: [{ categoria: 'JAQUETA', cor: { familia: 'BRANCO', tom: null }, material: null }],
+      }),
+    );
+    const r = await servico.sugerir('sub', {
+      mensagem: 'coloca uma jaqueta por cima',
+      pecasAnteriores: naTela,
+    });
+    assert.equal(r.tipo, 'LOOK');
+    if (r.tipo !== 'LOOK') return;
+    for (const id of naTela)
+      assert.ok(
+        r.pecas.some((p) => p.id === id),
+        'nenhuma peça sai',
+      );
+    assert.ok(r.pecas.some((p) => p.id === jaqueta.id));
+    assert.match(r.mensagem, /^Acrescentei Jaqueta Vermelha\./);
+  });
+
+  it('"quero uma blusa também" com look na tela vira acréscimo de camada', async () => {
+    const jaqueta = peca('JAQUETA', 'Preto', 'COLORADD_PRETO', '#1A1A1A');
+    const naTela = [armarioCompleto[0].id, armarioCompleto[5].id, armarioCompleto[10].id];
+    const servico = criarServico(
+      [...armarioCompleto, jaqueta],
+      intencao({ incluir: [{ categoria: 'BLUSA', cor: null, material: null }] }),
+    );
+    const r = await servico.sugerir('sub', {
+      mensagem: 'quero uma blusa também',
+      pecasAnteriores: naTela,
+    });
+    assert.equal(r.tipo === 'LOOK' && r.pecas.length, 4);
   });
 });

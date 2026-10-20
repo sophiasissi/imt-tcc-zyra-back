@@ -196,7 +196,7 @@ export class UsersService {
       async (tx) => {
         const pecas = await tx.peca.findMany({
           where: { usuarioId: usuario.id },
-          select: { imagemS3Key: true },
+          select: { imagemS3Key: true, imagemMiniS3Key: true },
         });
 
         await tx.usuario.delete({ where: { id: usuario.id } });
@@ -204,7 +204,9 @@ export class UsersService {
 
         // A foto de perfil sai junto com as das peças.
         return [
-          ...pecas.map((peca) => peca.imagemS3Key),
+          ...pecas.flatMap((peca) =>
+            peca.imagemMiniS3Key ? [peca.imagemS3Key, peca.imagemMiniS3Key] : [peca.imagemS3Key],
+          ),
           ...(usuario.fotoS3Key ? [usuario.fotoS3Key] : []),
         ];
       },

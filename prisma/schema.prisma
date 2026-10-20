@@ -52,6 +52,8 @@ enum Categoria {
   VESTIDO
   TENIS
   SAPATO
+  SANDALIA
+  CHINELO
 }
 
 enum Estilo {
@@ -153,6 +155,10 @@ model Peca {
   // e URL assinada expira -- guardar um link daria imagem quebrada depois. A
   // API devolve `imagemUrl`, uma URL assinada gerada na hora de exibir a peca.
   imagemS3Key String
+
+  // Miniatura de 480 px em WebP (~30 KB), para os cards. Nula nas peças
+  // cadastradas antes dela existir: aí o app usa a foto inteira.
+  imagemMiniS3Key String?
 
   // Resultado da analise da peca pela OpenAI (/analyze-clothing). A categoria
   // e obrigatoria: sem ela a peca nao entra em looks e o cadastro e recusado.
