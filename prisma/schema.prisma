@@ -39,6 +39,10 @@ enum TipoDaltonismo {
 enum Categoria {
   CAMISETA
   CAMISA
+  BLUSA
+  CROPPED
+  TOP
+  BODY
   MOLETOM
   JAQUETA
   BLAZER
@@ -82,9 +86,28 @@ enum Aquecimento {
   QUENTE
 }
 
+// Tecido pelo nome que as pessoas usam ("calca de moletom"). Pela etiqueta,
+// vale a fibra de maior proporcao (89% poliamida e 11% elastano = POLIAMIDA).
 enum Material {
   JEANS
   COURO
+  MOLETOM
+  MALHA
+  POLIAMIDA
+  TRICO
+  SOFT
+  LINHO
+  ALFAIATARIA
+  CETIM
+  VISCOSE
+  VELUDO
+}
+
+// Manga das pecas de cima, do body e do vestido; nula nas outras.
+enum Manga {
+  SEM_MANGA
+  CURTA
+  LONGA
 }
 
 model Usuario {
@@ -132,6 +155,7 @@ model Peca {
   // e obrigatoria: sem ela a peca nao entra em looks e o cadastro e recusado.
   // O resto fica nulo quando a IA nao teve certeza; a pessoa corrige depois.
   categoria   Categoria
+  manga       Manga?
   estilo      Estilo?
   estampa     Estampa?
   ocasioes    Ocasiao[]    @default([])
@@ -146,8 +170,8 @@ model Peca {
   hex            String // "#8FB3E0"
   colorAddSymbol String // "COLORADD_AZUL_CLARO"
 
-  // Segunda cor de pecas listradas ou estampadas. A visao ainda nao preenche;
-  // os campos ja existem para nao exigir outra migration quando preencher.
+  // Segunda cor de pecas listradas ou estampadas, da analise pela OpenAI. O hex
+  // secundario e a cor de referencia do simbolo, e nao uma cor medida na foto.
   corSecundariaNome        String?
   hexSecundario            String?
   colorAddSymbolSecundario String?

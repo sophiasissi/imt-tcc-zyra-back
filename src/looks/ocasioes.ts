@@ -1,4 +1,4 @@
-import { Categoria, Estilo, Ocasiao, Peca } from '@prisma/client';
+import { Categoria, Estilo, Material, Ocasiao, Peca } from '@prisma/client';
 
 import { PAPEL_DA_CATEGORIA } from './taxonomia';
 
@@ -30,6 +30,21 @@ function eCalcadoDeCasaOuPraia(peca: PecaOcasiao) {
 
 const PROIBIDAS_NA_ACADEMIA: Categoria[] = ['CAMISA', 'BLAZER', 'SAIA', 'VESTIDO', 'SAPATO'];
 
+// Curtas demais para o escritório.
+const PROIBIDAS_NO_TRABALHO: Categoria[] = ['SHORT', 'CROPPED', 'TOP'];
+
+// Soft é tecido de pijama e pelúcia: fica em casa ou no dia a dia.
+const SO_PARA_CASA: Material[] = ['SOFT'];
+
+// Tecidos de roupa social ou de festa, que não servem para treinar.
+const PROIBIDOS_NA_ACADEMIA: Material[] = ['JEANS', 'COURO', 'ALFAIATARIA', 'CETIM', 'LINHO'];
+
+// Tecidos quentes demais para a praia.
+const PROIBIDOS_NA_PRAIA: Material[] = ['COURO', 'MOLETOM', 'TRICO', 'SOFT', 'VELUDO'];
+
+const temMaterial = (peca: PecaOcasiao, materiais: Material[]) =>
+  peca.material !== null && materiais.includes(peca.material);
+
 export function compatibilidade(peca: PecaOcasiao, ocasiao: Ocasiao | null): Compatibilidade {
   if (!ocasiao) return 'ACEITAVEL';
 
@@ -40,8 +55,8 @@ export function compatibilidade(peca: PecaOcasiao, ocasiao: Ocasiao | null): Com
   switch (ocasiao) {
     case 'ACADEMIA':
       if (
-        peca.material === 'JEANS' ||
-        peca.material === 'COURO' ||
+        temMaterial(peca, PROIBIDOS_NA_ACADEMIA) ||
+        temMaterial(peca, SO_PARA_CASA) ||
         PROIBIDAS_NA_ACADEMIA.includes(peca.categoria) ||
         (peca.estilo && FORMAIS.includes(peca.estilo))
       ) {
@@ -52,7 +67,8 @@ export function compatibilidade(peca: PecaOcasiao, ocasiao: Ocasiao | null): Com
 
     case 'TRABALHO':
       if (
-        peca.categoria === 'SHORT' ||
+        PROIBIDAS_NO_TRABALHO.includes(peca.categoria) ||
+        temMaterial(peca, SO_PARA_CASA) ||
         peca.estilo === 'ESPORTIVO' ||
         eCalcadoDeCasaOuPraia(peca)
       ) {
@@ -62,13 +78,19 @@ export function compatibilidade(peca: PecaOcasiao, ocasiao: Ocasiao | null): Com
       return diaADia ? 'ACEITAVEL' : 'PROIBIDA';
 
     case 'FESTA':
-      if (peca.estilo === 'ESPORTIVO' || eCalcadoDeCasaOuPraia(peca)) return 'PROIBIDA';
+      if (
+        peca.estilo === 'ESPORTIVO' ||
+        temMaterial(peca, SO_PARA_CASA) ||
+        eCalcadoDeCasaOuPraia(peca)
+      ) {
+        return 'PROIBIDA';
+      }
       if (marcada) return 'ADEQUADA';
       return diaADia || peca.ocasioes.includes('TRABALHO') ? 'ACEITAVEL' : 'PROIBIDA';
 
     case 'PRAIA':
       if (
-        peca.material === 'COURO' ||
+        temMaterial(peca, PROIBIDOS_NA_PRAIA) ||
         peca.categoria === 'BLAZER' ||
         peca.estilo === 'SOCIAL' ||
         peca.aquecimento === 'QUENTE'
@@ -121,7 +143,7 @@ export function notaDeOcasiao(peca: PecaOcasiao & Pick<Peca, 'estampa'>, ocasiao
 
 /** O que cadastrar quando faltam peças para a ocasião. */
 export const SUGESTAO_DE_CADASTRO: Record<Ocasiao, string> = {
-  ACADEMIA: 'Cadastre roupas de treino, como camiseta esportiva, short ou legging.',
+  ACADEMIA: 'Cadastre roupas de treino, como top, camiseta esportiva, short ou legging.',
   TRABALHO: 'Cadastre peças como camisa, calça ou sapato fechado.',
   FESTA: 'Cadastre peças mais arrumadas, como camisa, calça ou vestido.',
   PRAIA: 'Cadastre peças leves, como short, camiseta ou vestido.',

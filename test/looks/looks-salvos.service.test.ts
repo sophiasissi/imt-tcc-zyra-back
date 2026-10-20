@@ -28,6 +28,7 @@ function peca(id: string, usuarioId: string, categoria: Peca['categoria']): Peca
     ocasioes: ['DIA_A_DIA'],
     aquecimento: 'MEDIO',
     material: null,
+    manga: null,
     corNome: 'Preto',
     hex: '#1A1A1A',
     colorAddSymbol: 'COLORADD_PRETO',

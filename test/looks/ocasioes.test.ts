@@ -25,6 +25,7 @@ function peca(
     ocasioes: ['DIA_A_DIA'],
     aquecimento: 'MEDIO',
     material: null,
+    manga: null,
     ...extras,
   };
 }
@@ -251,7 +252,7 @@ describe('descrição', () => {
       ),
     );
     assert.match(r.descricao, /Camiseta Vermelha Clara/);
-    assert.match(r.descricao, /Calça Preta/);
+    assert.match(r.descricao, /Calça jeans Preta/);
   });
 });
 

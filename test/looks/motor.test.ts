@@ -24,6 +24,7 @@ function peca(
     ocasioes: ['DIA_A_DIA'],
     aquecimento: 'MEDIO',
     material: null,
+    manga: null,
     ...extras,
   };
 }
@@ -57,7 +58,7 @@ const camisaAzul = peca('CAMISA', 'Azul', 'COLORADD_AZUL', '#2F5DA8', {
 const camisetaVerdeEstampada = peca('CAMISETA', 'Verde', 'COLORADD_VERDE', '#3A7D44', {
   estampa: 'ESTAMPADO',
 });
-const moletomCinza = peca('MOLETOM', 'Cinza', 'COLORADD_CINZA', '#808080', {
+const moletomCinza = peca('MOLETOM', 'Cinza Claro', 'COLORADD_CINZA_CLARO', '#808080', {
   aquecimento: 'QUENTE',
 });
 const calcaJeans = peca('CALCA', 'Azul', 'COLORADD_AZUL', '#3B5B85', { material: 'JEANS' });

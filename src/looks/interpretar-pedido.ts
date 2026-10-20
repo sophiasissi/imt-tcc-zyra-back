@@ -109,6 +109,8 @@ Campos:
   não entram em incluir, vão para naoMapeado.
 - evitarCategorias e evitarCores: só o que o usuário disse que não quer.
 - categorias: ${CATEGORIAS.join(', ')}. materiais: ${MATERIAIS.join(', ')}.
+  Blusa ou blusinha = BLUSA; regata = CAMISETA; "calça de moletom" = CALCA com
+  material MOLETOM, e "um moletom" = categoria MOLETOM; pijama de pelinho = SOFT.
 - cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}
   opcional. Rosa = VERMELHO CLARO, marrom = CASTANHO, marinho = AZUL ESCURO,
   vinho = VERMELHO ESCURO.
