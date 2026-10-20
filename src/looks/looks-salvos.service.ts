@@ -4,6 +4,7 @@ import { Peca } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import { SalvarLookDto } from './dto/salvar-look.dto';
+import { TituloDoLookService } from './titulo-do-look';
 import { ORDEM_DOS_PAPEIS, PAPEL_DA_CATEGORIA, Papel } from './taxonomia';
 
 export type PecaDoLookSalvo = Omit<Peca, 'imagemS3Key'> & { imagemUrl: string; papel: Papel };
@@ -31,6 +32,7 @@ export class LooksSalvosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
+    private readonly titulos: TituloDoLookService,
   ) {}
 
   /**
@@ -69,10 +71,14 @@ export class LooksSalvosService {
         ORDEM_DOS_PAPEIS.indexOf(PAPEL_DA_CATEGORIA[b.categoria]),
     );
 
+    // O título só é gerado aqui, para um look novo: salvar de novo não gasta.
+    const pedido = dto.pedido?.trim();
+    const nome = dto.nome || (pedido ? await this.titulos.gerar(pedido) : null);
+
     const look = await this.prisma.look.create({
       data: {
         usuarioId: usuario.id,
-        nome: dto.nome || null,
+        nome,
         ocasiao: dto.ocasiao ?? null,
         pecas: { create: ordenadas.map((peca, ordem) => ({ pecaId: peca.id, ordem })) },
       },

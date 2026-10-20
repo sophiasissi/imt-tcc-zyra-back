@@ -53,7 +53,17 @@ export type PecaNoLook = { id: string; papel: Papel };
 export type ResultadoMotor =
   | { status: 'POUCAS_PECAS'; mensagem: string; faltamSuperiores: number; faltamInferiores: number }
   | { status: 'SEM_LOOK'; mensagem: string; avisos: string[] }
-  | { status: 'LOOK'; pecas: PecaNoLook[]; descricao: string; avisos: string[] };
+  | {
+      status: 'LOOK';
+      pecas: PecaNoLook[];
+      descricao: string;
+      /**
+       * Numa troca ("troca o tênis"), só as peças que entraram agora. null num
+       * look novo: aí a resposta descreve o look inteiro.
+       */
+      descricaoDaTroca: string | null;
+      avisos: string[];
+    };
 
 export type OpcoesMotor = {
   /**
@@ -504,6 +514,12 @@ export function montarLook(
     status: 'LOOK',
     pecas: pecasDoLook.map((p) => ({ id: p.id, papel: p.papel })),
     descricao: pecasDoLook.map(descreverPeca).join(' + '),
+    descricaoDaTroca: trocados.size
+      ? pecasDoLook
+          .filter((p) => !anteriores.has(p.id))
+          .map(descreverPeca)
+          .join(' e ') || null
+      : null,
     avisos,
   };
 }

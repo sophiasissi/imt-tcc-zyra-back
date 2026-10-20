@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Peca } from '@prisma/client';
 
 import { LooksSalvosService } from '../../src/looks/looks-salvos.service';
+import { TituloDoLookService } from '../../src/looks/titulo-do-look';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { S3Service } from '../../src/storage/s3.service';
 
@@ -107,12 +108,20 @@ function criarBanco() {
   };
 
   const s3 = { getReadUrl: async (key: string) => `https://s3.exemplo/${key}` };
+  const pedidosDeTitulo: string[] = [];
+  const titulos = {
+    gerar: async (pedido: string) => {
+      pedidosDeTitulo.push(pedido);
+      return 'Casamento à noite';
+    },
+  };
   const servico = new LooksSalvosService(
     prisma as unknown as PrismaService,
     s3 as unknown as S3Service,
+    titulos as unknown as TituloDoLookService,
   );
 
-  return { servico, pecas, looks };
+  return { servico, pecas, looks, pedidosDeTitulo };
 }
 
 const [TENIS, CALCA, CAMISA] = [
@@ -144,6 +153,29 @@ describe('LooksSalvosService', () => {
       look.pecas.every((p) => !('imagemS3Key' in p)),
       'a chave do S3 não vai para o app',
     );
+  });
+
+  it('sem nome, cria o título a partir do pedido; com nome, usa o nome', async () => {
+    const comPedido = await banco.servico.salvar('sub-1', {
+      pecaIds: [TENIS, CALCA, CAMISA],
+      pedido: 'look pro casamento da minha prima à noite',
+    });
+    assert.equal(comPedido.nome, 'Casamento à noite');
+    assert.deepEqual(banco.pedidosDeTitulo, ['look pro casamento da minha prima à noite']);
+
+    const comNome = await banco.servico.salvar('sub-1', {
+      pecaIds: [CAMISA, CALCA],
+      nome: 'Meu look',
+      pedido: 'qualquer coisa',
+    });
+    assert.equal(comNome.nome, 'Meu look');
+    assert.equal(banco.pedidosDeTitulo.length, 1, 'com nome, não chama a IA');
+  });
+
+  it('salvar de novo não gera outro título', async () => {
+    await banco.servico.salvar('sub-1', { pecaIds: [TENIS, CALCA], pedido: 'festa' });
+    await banco.servico.salvar('sub-1', { pecaIds: [CALCA, TENIS], pedido: 'festa' });
+    assert.equal(banco.pedidosDeTitulo.length, 1);
   });
 
   it('salvar as mesmas peças de novo devolve o mesmo look', async () => {

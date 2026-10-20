@@ -27,6 +27,15 @@ export class SalvarLookDto {
   @MaxLength(60)
   nome?: string;
 
+  /**
+   * O pedido que gerou o look no chat. Sem nome, o back cria um título curto
+   * a partir dele ("Casamento à noite").
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pedido?: string;
+
   @IsOptional()
   @IsEnum(Ocasiao)
   ocasiao?: Ocasiao;
