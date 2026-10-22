@@ -73,6 +73,32 @@ export const ORDEM_DOS_PAPEIS: Papel[] = [
   'CALCADO',
 ];
 
+export const NIVEL_DE_AQUECIMENTO = { LEVE: 0, MEDIO: 1, QUENTE: 2 } as const;
+
+// Agasalhos que vão por cima da camiseta quando aparecem junto com ela.
+const AGASALHOS_DE_CIMA: Categoria[] = ['MOLETOM', 'BLUSA'];
+
+/**
+ * Papel de cada peça num look já montado. O papel não é guardado (o app manda
+ * só os ids, e o look salvo guarda só as peças), e pela categoria o moletom
+ * seria parte de cima. Com duas peças de cima, o agasalho (ou a mais quente)
+ * é a camada que vai por cima da outra.
+ */
+export function papeisNoLook(
+  pecas: { id: string; categoria: Categoria; aquecimento: Aquecimento | null }[],
+): Map<string, Papel> {
+  const papeis = new Map(pecas.map((p) => [p.id, PAPEL_DA_CATEGORIA[p.categoria]]));
+  const superiores = pecas.filter((p) => papeis.get(p.id) === 'SUPERIOR');
+  if (superiores.length < 2) return papeis;
+
+  const calor = (p: (typeof pecas)[number]) =>
+    (AGASALHOS_DE_CIMA.includes(p.categoria) ? 10 : 0) +
+    NIVEL_DE_AQUECIMENTO[p.aquecimento ?? 'MEDIO'];
+  const camada = superiores.reduce((a, b) => (calor(b) > calor(a) ? b : a));
+  papeis.set(camada.id, 'SOBREPOSICAO');
+  return papeis;
+}
+
 export const FORMALIDADE_DO_ESTILO: Record<Estilo, Formalidade> = {
   ESPORTIVO: 'BAIXA',
   STREETWEAR: 'BAIXA',
