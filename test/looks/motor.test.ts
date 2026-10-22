@@ -104,8 +104,8 @@ function look(resultado: ResultadoMotor) {
   return resultado as Extract<ResultadoMotor, { status: 'LOOK' }>;
 }
 
-function pecasDe(resultado: ResultadoMotor) {
-  return look(resultado).pecas.map((p) => armario.find((a) => a.id === p.id)!);
+function pecasDe(resultado: ResultadoMotor, de: PecaMotor[] = armario) {
+  return look(resultado).pecas.map((p) => de.find((a) => a.id === p.id)!);
 }
 
 describe('mínimo de peças', () => {
@@ -283,6 +283,139 @@ describe('harmonia', () => {
   });
 });
 
+describe('trocar a camada do look da tela', () => {
+  // Moletom por cima da camiseta: na tela ele é a camada, mas o app manda só
+  // os ids, e pela categoria o moletom seria parte de cima.
+  const moletomPreto = peca('MOLETOM', 'Preto', 'COLORADD_PRETO', '#1A1A1A', {
+    aquecimento: 'QUENTE',
+  });
+  const comDoisMoletons = [...armario, moletomPreto];
+  const lookNaTela = [camisetaBranca.id, calcaJeans.id, tenisBranco.id, moletomCinza.id];
+  const base = [camisetaBranca.id, calcaJeans.id, tenisBranco.id];
+
+  it('"quero outro moletom" troca o moletom e mantém o resto', () => {
+    const r = montarLook(
+      comDoisMoletons,
+      intencao({
+        trocar: ['CAMADA'],
+        incluir: [{ categoria: 'MOLETOM', cor: null, material: null }],
+      }),
+      { ...sempreOPrimeiro, pecasAnteriores: lookNaTela },
+    );
+    assert.equal(r.status, 'LOOK', r.status === 'SEM_LOOK' ? r.mensagem : '');
+    if (r.status !== 'LOOK') return;
+    const ids = r.pecas.map((p) => p.id);
+    for (const id of base) assert.ok(ids.includes(id), 'o resto do look fica');
+    assert.ok(!ids.includes(moletomCinza.id), 'o moletom antigo sai');
+    assert.deepEqual(
+      r.pecas.find((p) => p.id === moletomPreto.id),
+      { id: moletomPreto.id, papel: 'SOBREPOSICAO' },
+    );
+    assert.equal(r.pecas.length, 4);
+  });
+
+  it('"troca o moletom" sem dizer por qual põe outra camada no lugar', () => {
+    const r = montarLook(comDoisMoletons, intencao({ trocar: ['CAMADA'] }), {
+      ...sempreOPrimeiro,
+      pecasAnteriores: lookNaTela,
+    });
+    assert.equal(r.status, 'LOOK', r.status === 'SEM_LOOK' ? r.mensagem : '');
+    if (r.status !== 'LOOK') return;
+    const ids = r.pecas.map((p) => p.id);
+    for (const id of base) assert.ok(ids.includes(id), 'o resto do look fica');
+    assert.ok(!ids.includes(moletomCinza.id), 'o moletom antigo sai');
+    assert.ok(ids.includes(moletomPreto.id), 'entra o outro moletom');
+    assert.equal(r.pecas.length, 4);
+  });
+
+  it('"troca a camiseta" com moletom por cima mantém o moletom', () => {
+    const r = montarLook(comDoisMoletons, intencao({ trocar: ['CIMA'] }), {
+      ...sempreOPrimeiro,
+      pecasAnteriores: lookNaTela,
+    });
+    assert.equal(r.status, 'LOOK', r.status === 'SEM_LOOK' ? r.mensagem : '');
+    if (r.status !== 'LOOK') return;
+    const ids = r.pecas.map((p) => p.id);
+    assert.ok(!ids.includes(camisetaBranca.id), 'a camiseta sai');
+    assert.ok(ids.includes(moletomCinza.id), 'o moletom continua');
+    assert.ok(ids.includes(calcaJeans.id) && ids.includes(tenisBranco.id));
+  });
+});
+
+describe('uma peça chamativa por look', () => {
+  const tenisVermelho = peca('TENIS', 'Vermelho', 'COLORADD_VERMELHO', '#C0262D');
+  const moletomVermelho = peca('MOLETOM', 'Vermelho', 'COLORADD_VERMELHO', '#B22222', {
+    aquecimento: 'QUENTE',
+  });
+  const comTenisVermelho = [...armario, tenisVermelho];
+
+  it('tênis colorido pede o resto do look neutro', () => {
+    for (let i = 0; i < 5; i++) {
+      const r = montarLook(
+        comTenisVermelho,
+        intencao({
+          incluir: [
+            { categoria: 'TENIS', cor: { familia: 'VERMELHO', tom: null }, material: null },
+          ],
+        }),
+        { aleatorio: () => i / 5 },
+      );
+      const pecas = pecasDe(r, comTenisVermelho);
+      const outras = pecas.filter((p) => p.id !== tenisVermelho.id);
+      assert.equal(outras.length, pecas.length - 1, 'o tênis pedido está no look');
+      for (const p of outras) {
+        assert.ok(
+          !['VERDE', 'VERMELHO', 'ROXO', 'AMARELO'].some((c) => p.colorAddSymbol.includes(c)) &&
+            p.estampa === 'LISO',
+          `${p.categoria} ${p.corNome} chama atenção junto com o tênis`,
+        );
+      }
+    }
+  });
+
+  it('moletom fechado combina com a calça e o tênis, não com a camiseta de baixo', () => {
+    // Camiseta estampada e tênis vermelho na tela: o moletom cinza deixa uma
+    // peça chamativa à mostra; o vermelho, duas.
+    const lookNaTela = [camisetaVerdeEstampada.id, calcaJeans.id, tenisVermelho.id];
+    for (let i = 0; i < 5; i++) {
+      const r = montarLook(
+        [...comTenisVermelho, moletomVermelho],
+        intencao({
+          trocar: ['CAMADA'],
+          incluir: [{ categoria: 'MOLETOM', cor: null, material: null }],
+        }),
+        { aleatorio: () => i / 5, pecasAnteriores: lookNaTela },
+      );
+      const ids = look(r).pecas.map((p) => p.id);
+      assert.ok(ids.includes(moletomCinza.id), 'escolhe o moletom neutro');
+      assert.ok(!ids.includes(moletomVermelho.id));
+    }
+  });
+});
+
+describe('peça de frio com short', () => {
+  it('não junta manga longa com short quando dá para evitar', () => {
+    const camisetaMangaLonga = peca('CAMISETA', 'Preto', 'COLORADD_PRETO', '#1A1A1A', {
+      manga: 'LONGA',
+    });
+    const shortPreto = peca('SHORT', 'Preto', 'COLORADD_PRETO', '#151515');
+    const pecas = [...armario, camisetaMangaLonga, shortPreto];
+    for (let i = 0; i < 5; i++) {
+      const r = montarLook(
+        pecas,
+        intencao({
+          incluir: [{ categoria: 'SHORT', cor: { familia: 'PRETO', tom: null }, material: null }],
+        }),
+        { aleatorio: () => i / 5 },
+      );
+      const ids = look(r).pecas.map((p) => p.id);
+      assert.ok(ids.includes(shortPreto.id));
+      assert.ok(!ids.includes(camisetaMangaLonga.id), 'manga longa com short');
+      assert.ok(!ids.includes(moletomCinza.id), 'moletom com short');
+    }
+  });
+});
+
 describe('acrescentar camada ao look da tela', () => {
   const lookNaTela = [camisetaBranca.id, calcaJeans.id, tenisBranco.id];
   const pedido = (categoria: PecaMotor['categoria']) =>
@@ -309,6 +442,45 @@ describe('acrescentar camada ao look da tela', () => {
     assert.ok(r.pecas.some((p) => p.papel === 'SOBREPOSICAO'));
     // Blusa e moletom são sinônimos: usar o moletom não gera aviso.
     assert.ok(r.pecas.some((p) => p.id === moletomCinza.id));
+    assert.ok(!r.avisos.some((a) => /Não achei/.test(a)), r.avisos.join(' | '));
+  });
+
+  it('"quero um moletom ou jaqueta" põe só uma das duas como camada', () => {
+    const r = montarLook(
+      armario,
+      intencao({
+        trocar: ['CAMADA'],
+        incluir: [
+          { categoria: 'MOLETOM', cor: null, material: null },
+          { categoria: 'JAQUETA', cor: null, material: null },
+        ],
+      }),
+      { pecasAnteriores: lookNaTela, alternativas: [[0, 1]] },
+    );
+    assert.equal(r.status, 'LOOK');
+    if (r.status !== 'LOOK') return;
+    const ids = r.pecas.map((p) => p.id);
+    for (const id of lookNaTela) assert.ok(ids.includes(id), 'nenhuma peça da tela sai');
+    assert.equal(r.pecas.filter((p) => p.papel === 'SOBREPOSICAO').length, 1);
+    assert.ok(ids.includes(moletomCinza.id) || ids.includes(jaquetaCouro.id));
+    assert.ok(!r.avisos.some((a) => /Não achei/.test(a)), r.avisos.join(' | '));
+  });
+
+  it('"moletom ou jaqueta" sem moletom no armário usa a jaqueta sem avisar', () => {
+    const semMoletom = armario.filter((p) => p.id !== moletomCinza.id);
+    const r = montarLook(
+      semMoletom,
+      intencao({
+        incluir: [
+          { categoria: 'MOLETOM', cor: null, material: null },
+          { categoria: 'JAQUETA', cor: null, material: null },
+        ],
+      }),
+      { ...sempreOPrimeiro, alternativas: [[0, 1]] },
+    );
+    assert.equal(r.status, 'LOOK');
+    if (r.status !== 'LOOK') return;
+    assert.ok(r.pecas.some((p) => p.id === jaquetaCouro.id));
     assert.ok(!r.avisos.some((a) => /Não achei/.test(a)), r.avisos.join(' | '));
   });
 

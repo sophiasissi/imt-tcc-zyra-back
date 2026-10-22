@@ -193,11 +193,47 @@ describe('festa', () => {
     assert.ok(r.avisos.some((a) => a.startsWith('Não encontrei calçado para festa')));
   });
 
+  it('nunca usa short', () => {
+    emTodosOsSorteios((aleatorio) => {
+      const pecas = pecasDe(montarLook(armario, intencao({ ocasiao: 'FESTA' }), { aleatorio }));
+      assert.ok(!pecas.some((p) => p.categoria === 'SHORT'));
+    });
+  });
+
   it('prefere a camisa à camiseta com logo', () => {
     const pecas = pecasDe(
       montarLook(armario, intencao({ ocasiao: 'FESTA' }), { aleatorio: () => 0 }),
     );
     assert.ok(pecas.some((p) => p.id === camisaBranca.id));
+  });
+});
+
+describe('encontro (date)', () => {
+  const dateCasual = intencao({ ocasiao: 'DIA_A_DIA', formalidade: 'MEDIA' });
+
+  it('não usa camisa com gola', () => {
+    emTodosOsSorteios((aleatorio) => {
+      const pecas = pecasDe(montarLook(armario, dateCasual, { aleatorio, encontro: true }));
+      assert.ok(!pecas.some((p) => p.categoria === 'CAMISA'));
+    });
+  });
+
+  it('não usa short', () => {
+    emTodosOsSorteios((aleatorio) => {
+      const pecas = pecasDe(montarLook(armario, dateCasual, { aleatorio, encontro: true }));
+      assert.ok(!pecas.some((p) => p.categoria === 'SHORT'));
+    });
+  });
+
+  it('a camisa entra se a pessoa pedir', () => {
+    const r = look(
+      montarLook(
+        armario,
+        { ...dateCasual, incluir: [{ categoria: 'CAMISA', cor: null, material: null }] },
+        { aleatorio: () => 0, encontro: true },
+      ),
+    );
+    assert.ok(r.pecas.some((p) => p.id === camisaBranca.id));
   });
 });
 

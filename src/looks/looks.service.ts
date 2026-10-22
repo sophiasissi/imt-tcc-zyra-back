@@ -15,8 +15,10 @@ import {
   Localizacao,
 } from './clima';
 import {
+  alternativasDoPedido,
   entenderRespostaCurta,
   falaDeCor,
+  falaDeEncontro,
   pedeParaAcrescentar,
   perguntaDoLook,
   RESPOSTA_NAO_SALVAR,
@@ -141,6 +143,20 @@ export class LooksService {
       };
     }
 
+    // Date: casual arrumado. A IA às vezes marca como festa ("encontro à
+    // noite") e quase nunca dá formalidade, e aí a camisa social entrava.
+    const encontro =
+      falaDeEncontro(dto.mensagem) ||
+      (historico.some((m) => m.autor === 'usuario' && falaDeEncontro(m.texto)) &&
+        (!intencao.ocasiao || intencao.ocasiao === 'DIA_A_DIA' || intencao.ocasiao === 'FESTA'));
+    if (encontro) {
+      intencao = {
+        ...intencao,
+        ocasiao: !intencao.ocasiao || intencao.ocasiao === 'FESTA' ? 'DIA_A_DIA' : intencao.ocasiao,
+        formalidade: intencao.formalidade ?? 'MEDIA',
+      };
+    }
+
     if (intencao.tipo === 'ESCLARECER') {
       return { tipo: 'PERGUNTA', mensagem: intencao.pergunta ?? PERGUNTA_PADRAO };
     }
@@ -164,6 +180,9 @@ export class LooksService {
     const resultado = montarLook(pecas, intencao, {
       pecasAnteriores: dto.pecasAnteriores,
       pecasRecentes: dto.pecasRecentes,
+      // A IA lê "moletom ou jaqueta" como as duas peças; o texto diz que é uma.
+      alternativas: alternativasDoPedido(dto.mensagem, intencao.incluir),
+      encontro,
     });
 
     if (resultado.status !== 'LOOK') {

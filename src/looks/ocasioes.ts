@@ -92,6 +92,8 @@ export function compatibilidade(peca: PecaOcasiao, ocasiao: Ocasiao | null): Com
 
     case 'FESTA':
       if (
+        // Short não vai para festa (decisão de 20/10/2026).
+        peca.categoria === 'SHORT' ||
         peca.estilo === 'ESPORTIVO' ||
         temMaterial(peca, SO_PARA_CASA) ||
         eCalcadoDeCasaOuPraia(peca)

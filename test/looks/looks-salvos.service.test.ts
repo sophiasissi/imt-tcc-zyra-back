@@ -52,6 +52,7 @@ function criarBanco() {
     peca('11111111-1111-4111-8111-000000000001', 'u1', 'TENIS'),
     peca('11111111-1111-4111-8111-000000000002', 'u1', 'CALCA'),
     peca('11111111-1111-4111-8111-000000000003', 'u1', 'CAMISA'),
+    peca('11111111-1111-4111-8111-000000000004', 'u1', 'MOLETOM'),
     peca('22222222-2222-4222-8222-000000000001', 'u2', 'CAMISETA'),
   ];
   const looks: LookFake[] = [];
@@ -156,6 +157,23 @@ describe('LooksSalvosService', () => {
     );
   });
 
+  it('moletom com a camisa volta como camada, para o app montar a colagem', async () => {
+    const MOLETOM = '11111111-1111-4111-8111-000000000004';
+    const look = await banco.servico.salvar('sub-1', {
+      pecaIds: [MOLETOM, TENIS, CALCA, CAMISA],
+      nome: 'Frio',
+    });
+    assert.deepEqual(
+      look.pecas.map((p) => [p.categoria, p.papel]),
+      [
+        ['CAMISA', 'SUPERIOR'],
+        ['MOLETOM', 'SOBREPOSICAO'],
+        ['CALCA', 'INFERIOR'],
+        ['TENIS', 'CALCADO'],
+      ],
+    );
+  });
+
   it('sem nome, cria o título a partir do pedido; com nome, usa o nome', async () => {
     const comPedido = await banco.servico.salvar('sub-1', {
       pecaIds: [TENIS, CALCA, CAMISA],
@@ -210,6 +228,6 @@ describe('LooksSalvosService', () => {
     assert.equal(banco.looks.length, 1);
     assert.equal((await banco.servico.remover('sub-1', look.id)).message, 'Look removido.');
     assert.equal(banco.looks.length, 0);
-    assert.equal(banco.pecas.length, 4, 'apagar o look não apaga nenhuma peça');
+    assert.equal(banco.pecas.length, 5, 'apagar o look não apaga nenhuma peça');
   });
 });

@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import { SalvarLookDto } from './dto/salvar-look.dto';
 import { TituloDoLookService } from './titulo-do-look';
-import { ORDEM_DOS_PAPEIS, PAPEL_DA_CATEGORIA, Papel } from './taxonomia';
+import { ORDEM_DOS_PAPEIS, Papel, papeisNoLook } from './taxonomia';
 
 export type PecaDoLookSalvo = Omit<Peca, 'imagemS3Key' | 'imagemMiniS3Key'> &
   FotosDaPeca & { papel: Papel };
@@ -67,10 +67,10 @@ export class LooksSalvosService {
       return this.toResponse(existente);
     }
 
+    const papeis = papeisNoLook(pecas);
     const ordenadas = [...pecas].sort(
       (a, b) =>
-        ORDEM_DOS_PAPEIS.indexOf(PAPEL_DA_CATEGORIA[a.categoria]) -
-        ORDEM_DOS_PAPEIS.indexOf(PAPEL_DA_CATEGORIA[b.categoria]),
+        ORDEM_DOS_PAPEIS.indexOf(papeis.get(a.id)!) - ORDEM_DOS_PAPEIS.indexOf(papeis.get(b.id)!),
     );
 
     // O título só é gerado aqui, para um look novo: salvar de novo não gasta.
@@ -130,6 +130,9 @@ export class LooksSalvosService {
   }
 
   private async toResponse(look: LookDoBanco): Promise<LookSalvo> {
+    // Moletom por cima da camiseta volta como camada, e não como segunda peça
+    // de cima: sem isso, o app não montava a colagem do look salvo.
+    const papeis = papeisNoLook(look.pecas.map(({ peca }) => peca));
     const pecas = await Promise.all(
       [...look.pecas]
         .sort((a, b) => a.ordem - b.ordem)
@@ -137,7 +140,7 @@ export class LooksSalvosService {
           const { imagemS3Key, imagemMiniS3Key, ...dados } = peca;
           return {
             ...dados,
-            papel: PAPEL_DA_CATEGORIA[peca.categoria],
+            papel: papeis.get(peca.id)!,
             ...(await fotosDaPeca(this.s3, { imagemS3Key, imagemMiniS3Key })),
           };
         }),

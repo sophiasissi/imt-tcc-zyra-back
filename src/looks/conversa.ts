@@ -1,4 +1,5 @@
-import { MensagemHistorico } from './interpretar-pedido';
+import { MensagemHistorico, PecaDesejada } from './interpretar-pedido';
+import { Categoria } from './taxonomia';
 
 /**
  * Perguntas que a Zyra faz no fim de cada look e respostas curtas que o back
@@ -108,7 +109,114 @@ export function pedeParaAcrescentar(mensagem: string) {
 const PALAVRA_DE_COR =
   /\b(pret|branc|cinz|vermelh|ros[ae]|vinho|bord[oô]|azul|azuis|marinho|verde|amarel|laranja|rox[ao]|lil[aá]s|marrom|marrons|bege|caramelo|creme|nude|mostarda|dourad|prat|colorid|neutr|clar[ao]|escur[ao])/;
 
+// "Date", "encontro", "sair com o crush", "jantar romântico".
+const ENCONTRO =
+  /\b(date|encontro|crush|ficante|paquera|namorad[oa]|jantar rom[aâ]ntico|sair com (ela|ele|algu[eé]m|uma (garota|menina|mina)|um (garoto|menino|cara)))\b/;
+
+/**
+ * Pedido de look para um encontro. Date não é festa (decisão de 20/10/2026):
+ * é um look casual arrumado, sem peça social.
+ */
+export function falaDeEncontro(mensagem: string) {
+  return ENCONTRO.test(normalizar(mensagem));
+}
+
 /** A mensagem fala de alguma cor? */
 export function falaDeCor(mensagem: string) {
   return PALAVRA_DE_COR.test(normalizar(mensagem));
+}
+
+// Palavras que a pessoa usa para cada categoria, sem acento. "Casaco" pode ter
+// virado moletom ou jaqueta na IA, então vale pelas duas.
+const CATEGORIAS_DA_PALAVRA: Record<string, Categoria[]> = {
+  camiseta: ['CAMISETA'],
+  regata: ['CAMISETA'],
+  camisa: ['CAMISA'],
+  blusa: ['BLUSA'],
+  blusinha: ['BLUSA'],
+  cropped: ['CROPPED'],
+  top: ['TOP'],
+  body: ['BODY'],
+  moletom: ['MOLETOM'],
+  moletons: ['MOLETOM'],
+  jaqueta: ['JAQUETA'],
+  casaco: ['JAQUETA', 'MOLETOM'],
+  blazer: ['BLAZER'],
+  calca: ['CALCA'],
+  short: ['SHORT'],
+  bermuda: ['SHORT'],
+  saia: ['SAIA'],
+  vestido: ['VESTIDO'],
+  tenis: ['TENIS'],
+  sapato: ['SAPATO'],
+  sandalia: ['SANDALIA'],
+  chinelo: ['CHINELO'],
+};
+
+// Palavras que encerram o trecho de uma alternativa: em "camiseta preta ou
+// branca com calça", a calça não faz parte do "ou".
+const FIM_DA_ALTERNATIVA = new Set([',', 'e', 'com', 'mas', 'ou', 'sem', 'para', 'pra', 'nem']);
+// Palavras entre a peça e o "ou" ("um moletom cinza ou uma jaqueta").
+const MAXIMO_DE_PALAVRAS_ATE_A_PECA = 3;
+
+function categoriasDe(palavra: string | undefined): Categoria[] | null {
+  if (!palavra) return null;
+  return CATEGORIAS_DA_PALAVRA[palavra] ?? CATEGORIAS_DA_PALAVRA[palavra.replace(/s$/, '')] ?? null;
+}
+
+function categoriasDaPalavra(palavras: string[], i: number): Categoria[] | null {
+  // "Calça de moletom": peça + "de" + palavra é material. Já em "vou de tênis",
+  // o tênis é a peça.
+  if (palavras[i - 1] === 'de' && categoriasDe(palavras[i - 2])) return null;
+  return categoriasDe(palavras[i]);
+}
+
+/** Primeira peça citada a partir do "ou", andando para um lado (passo -1 ou 1). */
+function pecaPerto(palavras: string[], ou: number, passo: 1 | -1): Categoria[] | null {
+  let outras = 0;
+  for (let i = ou + passo; i >= 0 && i < palavras.length; i += passo) {
+    if (FIM_DA_ALTERNATIVA.has(palavras[i])) return null;
+    const categorias = categoriasDaPalavra(palavras, i);
+    if (categorias) return categorias;
+    if (++outras > MAXIMO_DE_PALAVRAS_ATE_A_PECA) return null;
+  }
+  return null;
+}
+
+/**
+ * Peças pedidas com "ou", como grupos de índices de `incluir`: basta uma do
+ * grupo estar no look. A IA devolve "quero um moletom ou jaqueta" como as duas
+ * peças, e o motor exigia as duas juntas.
+ *
+ * Só entram no grupo as peças citadas em volta do "ou": em "camiseta preta ou
+ * branca com calça jeans", a calça continua obrigatória. Sem peça depois do
+ * "ou" ("camiseta preta ou branca"), a alternativa é a mesma peça em outra cor.
+ */
+export function alternativasDoPedido(mensagem: string, incluir: PecaDesejada[]): number[][] {
+  const palavras = mensagem
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[,;.!?]/g, ' , ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const grupos: Set<number>[] = [];
+  palavras.forEach((palavra, ou) => {
+    if (palavra !== 'ou') return;
+    const antes = pecaPerto(palavras, ou, -1);
+    if (!antes) return;
+    const categorias = [...antes, ...(pecaPerto(palavras, ou, 1) ?? antes)];
+    const indices = incluir.flatMap((peca, i) =>
+      peca.categoria && categorias.includes(peca.categoria) ? [i] : [],
+    );
+    if (indices.length < 2) return;
+
+    // "Camiseta ou camisa ou blusa": grupos que se tocam viram um só.
+    const juntos = grupos.filter((grupo) => indices.some((i) => grupo.has(i)));
+    const novo = new Set([...indices, ...juntos.flatMap((grupo) => [...grupo])]);
+    grupos.splice(0, grupos.length, ...grupos.filter((g) => !juntos.includes(g)), novo);
+  });
+
+  return grupos.map((grupo) => [...grupo].sort((a, b) => a - b));
 }

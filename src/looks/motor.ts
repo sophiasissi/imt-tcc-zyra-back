@@ -15,10 +15,12 @@ import {
   CATEGORIAS_PARECIDAS,
   Formalidade,
   FORMALIDADE_DO_ESTILO,
+  NIVEL_DE_AQUECIMENTO,
   NIVEL_FORMALIDADE,
   ORDEM_DOS_PAPEIS,
   PAPEL_DA_CATEGORIA,
   Papel,
+  papeisNoLook,
 } from './taxonomia';
 
 /**
@@ -74,6 +76,13 @@ export type OpcoesMotor = {
   pecasAnteriores?: string[];
   /** Peças dos últimos looks da conversa: levemente penalizadas, para variar. */
   pecasRecentes?: string[];
+  /**
+   * Pedidos com "ou" ("moletom ou jaqueta"), como grupos de índices de
+   * intencao.incluir: basta uma peça de cada grupo estar no look.
+   */
+  alternativas?: number[][];
+  /** Look para um encontro: peça com gola (camisa) fica formal demais. */
+  encontro?: boolean;
   /** Fonte de aleatoriedade, injetável nos testes. */
   aleatorio?: () => number;
 };
@@ -126,6 +135,26 @@ function enriquecer(peca: PecaMotor): PecaRica {
     formalidade: peca.estilo ? FORMALIDADE_DO_ESTILO[peca.estilo] : 'MEDIA',
     neutra: eNeutra(cor, peca.material),
   };
+}
+
+// No date: camisa (gola) é peça de trabalho ou de evento sério, formal
+// demais; short é casual demais para sair à noite. Só pesam contra: se a
+// pessoa pedir a peça, ela entra.
+const FORA_DO_TOM_NO_ENCONTRO: Categoria[] = ['CAMISA', 'SHORT'];
+const PENALIDADE_NO_ENCONTRO = 4;
+
+/**
+ * No look da tela, a peça de cima vestida por cima de outra (moletom sobre a
+ * camiseta) é a camada. Sem isso, "troca o moletom" não achava camada para
+ * trocar, e "outro moletom" somava uma terceira peça de cima ao look.
+ */
+function marcarCamadaDoLookAnterior(pecas: PecaRica[], anteriores: Set<string>): PecaRica[] {
+  const papeis = papeisNoLook(pecas.filter((p) => anteriores.has(p.id)));
+  return pecas.map((p) =>
+    papeis.get(p.id) === 'SOBREPOSICAO' && p.papel === 'SUPERIOR'
+      ? { ...p, papel: 'SOBREPOSICAO' }
+      : p,
+  );
 }
 
 export function contarParaMinimo(pecas: Pick<PecaMotor, 'categoria'>[]) {
@@ -318,8 +347,9 @@ function notaDaPeca(
       2 * Math.abs(NIVEL_FORMALIDADE[peca.formalidade] - NIVEL_FORMALIDADE[intencao.formalidade]);
   }
   if (intencao.aquecimento && peca.aquecimento) {
-    const nivel = { LEVE: 0, MEDIO: 1, QUENTE: 2 };
-    nota -= 1.5 * Math.abs(nivel[peca.aquecimento] - nivel[intencao.aquecimento]);
+    nota -=
+      1.5 *
+      Math.abs(NIVEL_DE_AQUECIMENTO[peca.aquecimento] - NIVEL_DE_AQUECIMENTO[intencao.aquecimento]);
   }
   // Manga longa no calor e sem manga no frio pesam contra, sem proibir.
   if (intencao.aquecimento === 'LEVE' && peca.manga === 'LONGA') nota -= 1;
@@ -347,33 +377,68 @@ function materiaisNaoCombinam(look: PecaRica[]) {
   );
 }
 
+// Camadas fechadas: vestidas, cobrem a peça de cima. Jaqueta e blazer
+// costumam ficar abertos e deixam a peça de baixo à mostra.
+const CAMADAS_FECHADAS: Categoria[] = ['MOLETOM', 'BLUSA'];
+const ESTAMPAS_QUE_CHAMAM_ATENCAO: PecaRica['estampa'][] = ['ESTAMPADO', 'LISTRADO', 'XADREZ'];
+
+/** Cor forte ou estampa marcante: a peça que chama a atenção do look. */
+function chamaAtencao(peca: PecaRica) {
+  return !peca.neutra || ESTAMPAS_QUE_CHAMAM_ATENCAO.includes(peca.estampa);
+}
+
+/**
+ * O que aparece do look. Com moletom fechado por cima, a camiseta some: o
+ * look é visto de dois jeitos, sem o moletom (camiseta + calça + tênis) e com
+ * ele (moletom + calça + tênis). Cada um precisa combinar com a calça e o
+ * tênis; a camiseta e o moletom não precisam combinar entre si.
+ */
+function vistasDoLook(look: PecaRica[]): PecaRica[][] {
+  const camada = look.find((p) => p.papel === 'SOBREPOSICAO');
+  const cima = look.find((p) => p.papel === 'SUPERIOR');
+  if (!camada || !cima || !CAMADAS_FECHADAS.includes(camada.categoria)) return [look];
+  return [look.filter((p) => p !== camada), look.filter((p) => p !== cima)];
+}
+
 /** Regras gerais de harmonia, valem para qualquer pessoa. */
-function notaDeHarmonia(look: PecaRica[]) {
+function harmoniaDaVista(look: PecaRica[]) {
   let nota = 0;
 
   if (materiaisNaoCombinam(look)) nota -= 10;
 
-  // No máximo duas cores fortes; neutros combinam com tudo.
-  const cromaticas = new Set(look.filter((p) => !p.neutra).map((p) => p.cor.familia));
-  if (cromaticas.size > 2) nota -= 6 * (cromaticas.size - 2);
-
-  // No máximo uma peça estampada (logo pesa metade).
-  const estampa = look.reduce(
-    (soma, p) => soma + (!p.estampa || p.estampa === 'LISO' ? 0 : p.estampa === 'LOGO' ? 0.5 : 1),
-    0,
-  );
-  if (estampa > 1) nota -= 5 * (estampa - 1);
+  // Uma peça só chama a atenção (cor forte ou estampa marcante); o resto
+  // fica neutro. Tênis colorido pede camiseta e calça neutras.
+  const chamativas = look.filter(chamaAtencao).length;
+  if (chamativas > 1) nota -= 6 * (chamativas - 1);
 
   // Peças de formalidades muito diferentes não combinam (ex.: blazer com tênis esportivo).
   const niveis = look.map((p) => NIVEL_FORMALIDADE[p.formalidade]);
   if (Math.max(...niveis) - Math.min(...niveis) > 1) nota -= 3;
 
-  // Contraste de claridade entre a parte de cima e a de baixo ajuda o look a "ler" bem.
-  const cima = look.find((p) => p.papel === 'SUPERIOR');
+  // Contraste de claridade entre a parte de cima e a de baixo ajuda o look a
+  // "ler" bem. Com o moletom fechado, a parte de cima que aparece é ele.
+  const cima =
+    look.find((p) => p.papel === 'SUPERIOR') ?? look.find((p) => p.papel === 'SOBREPOSICAO');
   const baixo = look.find((p) => p.papel === 'INFERIOR');
   if (cima && baixo && Math.abs(cima.cor.luminosidade - baixo.cor.luminosidade) >= 20) nota += 1;
 
+  // Peça de frio em cima e short embaixo não conversam (manga longa ou
+  // moletom com short).
+  if (
+    baixo?.categoria === 'SHORT' &&
+    cima &&
+    (cima.manga === 'LONGA' || cima.aquecimento === 'QUENTE')
+  ) {
+    nota -= 3;
+  }
+
   return nota;
+}
+
+/** Média das vistas: com camada fechada, as duas pesam igual. */
+function notaDeHarmonia(look: PecaRica[]) {
+  const vistas = vistasDoLook(look);
+  return vistas.reduce((soma, vista) => soma + harmoniaDaVista(vista), 0) / vistas.length;
 }
 
 export function montarLook(
@@ -402,12 +467,16 @@ export function montarLook(
     if (!notas.has(p.id)) {
       notas.set(
         p.id,
-        notaDaPeca(p, intencao, anteriores, recentes) + aleatorio() * VARIACAO_ALEATORIA,
+        notaDaPeca(p, intencao, anteriores, recentes) -
+          (opcoes.encontro && FORA_DO_TOM_NO_ENCONTRO.includes(p.categoria)
+            ? PENALIDADE_NO_ENCONTRO
+            : 0) +
+          aleatorio() * VARIACAO_ALEATORIA,
       );
     }
     return notas.get(p.id)!;
   };
-  const todasAsPecas = pecasDoArmario.map(enriquecer);
+  const todasAsPecas = marcarCamadaDoLookAnterior(pecasDoArmario.map(enriquecer), anteriores);
 
   // "Troca o tênis": o resto do look anterior fica fixo e a peça trocada sai.
   const trocados = new Set(intencao.trocar.flatMap((parte) => PAPEIS_DA_PARTE[parte]));
@@ -467,16 +536,57 @@ export function montarLook(
     return [];
   };
 
-  // "Quero usar X" e as peças mantidas do look anterior entram mesmo fora da
-  // ocasião: foi o usuário quem escolheu.
-  const obrigatorias = [
-    ...intencao.incluir.map((pedido) =>
+  // Cada pedido com os avisos dele à parte, para decidir abaixo quais valem.
+  const resolvidos = intencao.incluir.map((pedido) => {
+    const antes = avisos.length;
+    const achadas =
       pedeCamada && pedido.categoria && AGASALHOS_POR_PEDIDO[pedido.categoria]
         ? resolverComoCamada(pedido)
-        : resolverPedido(pedido, pecas, avisos),
-    ),
-    ...fixas.map((p) => [p]),
-  ].filter((lista) => lista.length > 0);
+        : resolverPedido(pedido, pecas, avisos);
+    return { achadas, avisos: avisos.splice(antes) };
+  });
+
+  // "Troca o moletom" sem dizer por qual: entra outra peça do mesmo tipo como
+  // camada (ou, sem nenhuma, um agasalho parecido). Sem isso, a camada só saía.
+  const camadaTrocada = doLookAnterior.find(
+    (p) => trocadas.has(p.id) && p.papel === 'SOBREPOSICAO',
+  );
+  let novaCamada: PecaRica[] = [];
+  if (camadaTrocada && !intencao.incluir.length) {
+    const antes = avisos.length;
+    novaCamada = resolverComoCamada({
+      categoria: camadaTrocada.categoria,
+      cor: null,
+      material: null,
+    });
+    if (!novaCamada.length) {
+      avisos.splice(antes);
+      avisos.push('Não encontrei outra peça para usar por cima no seu armário.');
+    }
+  }
+
+  // "Moletom ou jaqueta": o grupo vira uma obrigatória só, cumprida por
+  // qualquer uma. Se alguma opção foi achada, o "não achei" das outras sai.
+  const grupos = opcoes.alternativas ?? [];
+  const deAlgumGrupo = new Set(grupos.flat());
+  const deAlternativas = grupos.map((grupo) => {
+    const membros = grupo.map((i) => resolvidos[i]).filter(Boolean);
+    const achadas = membros.flatMap((m) => m.achadas);
+    if (!achadas.length) avisos.push(...membros.flatMap((m) => m.avisos));
+    return achadas;
+  });
+  const avulsas = resolvidos
+    .filter((_, i) => !deAlgumGrupo.has(i))
+    .map((r) => {
+      avisos.push(...r.avisos);
+      return r.achadas;
+    });
+
+  // "Quero usar X" e as peças mantidas do look anterior entram mesmo fora da
+  // ocasião: foi o usuário quem escolheu.
+  const obrigatorias = [...avulsas, ...deAlternativas, novaCamada, ...fixas.map((p) => [p])].filter(
+    (lista) => lista.length > 0,
+  );
   const pedidas = new Set(obrigatorias.flat());
 
   // Peça proibida para a ocasião nunca entra (calça jeans na academia, chinelo na festa).
