@@ -43,15 +43,19 @@ enum Categoria {
   CROPPED
   TOP
   BODY
+  CORSET
   MOLETOM
+  SUETER
   JAQUETA
   BLAZER
+  COLETE
   CALCA
   SHORT
   SAIA
   VESTIDO
   TENIS
   SAPATO
+  BOTA
   SANDALIA
   CHINELO
 }
@@ -112,6 +116,14 @@ enum Manga {
   LONGA
 }
 
+// Altura do cano da bota (lista da Sophia, 05/11/2026); nula nas outras pecas.
+enum Cano {
+  CURTO
+  MEDIO
+  LONGO
+  ACIMA_DO_JOELHO
+}
+
 model Usuario {
   id String @id @default(uuid())
 
@@ -165,12 +177,40 @@ model Peca {
   // O resto fica nulo quando a IA nao teve certeza; a pessoa corrige depois.
   categoria   Categoria
   manga       Manga?
+  // So' na bota. O motor usa o cano para a ocasiao, o clima e a saia.
+  cano        Cano?
+  // Ultima vez que a peca apareceu num look sugerido pelo chat. O motor tira
+  // pontos da peca usada ha pouco, para variar as pecas entre uma conversa e
+  // outra. Gravada por SQL direto, para nao mexer em `atualizadoEm`.
+  sugeridaEm  DateTime?
+  // Calcado com salto de uns 3 cm ou mais (analise da OpenAI); so' em sapato,
+  // sandalia e bota. O motor tira o salto do passeio e da balada.
+  salto       Boolean?
   estilo      Estilo?
   estampa     Estampa?
   ocasioes    Ocasiao[]    @default([])
   aquecimento Aquecimento?
   // So jeans e couro, os materiais que a IA reconhece com confianca pela foto.
   material    Material?
+  // Decote marcado, costas abertas, ombro de fora, alça fina, barriga de fora
+  // ou transparência (análise da OpenAI). O motor tira a peça do trabalho.
+  // Nulo nas peças analisadas antes de 23/10/2026.
+  decotada    Boolean?
+  // Saia ou vestido acima do meio da coxa (análise da OpenAI). No trabalho, só
+  // entra saia ou vestido com `curta` = false. Nulo nas peças analisadas antes
+  // de 23/10/2026 e nas que não são saia nem vestido.
+  curta       Boolean?
+  // Corte de alfaiataria (vinco, cós estruturado, bolso faca), de qualquer
+  // fibra: a calça de alfaiataria de viscose tem material VISCOSE e
+  // alfaiataria = true. Nulo nas peças analisadas antes de 10/11/2026.
+  alfaiataria Boolean?
+  // Gola de camisa (camisa, polo, chemise). Fica fora do look de ficar em
+  // casa, e a camiseta com colarinho se chama "Camisa polo".
+  colarinho   Boolean?
+  // Casaco pesado de frio forte (puffer, parka, sobretudo de lã). O motor só o
+  // usa com 13 °C ou menos. Só em jaqueta e blazer; nulo nas peças analisadas
+  // antes de 10/11/2026.
+  casacoPesado Boolean?
 
   // Resultado do /detect-color. E' o dado central do app: e' justamente o que
   // a pessoa daltonica nao consegue obter sozinha. O chat de looks compara as
@@ -208,6 +248,10 @@ model Look {
   pecas LookPeca[]
 
   criadoEm DateTime @default(now())
+  // Ultima vez que a pessoa salvou o look; a galeria ordena por aqui. Salvar
+  // de novo as mesmas pecas nao cria copia: so' atualiza esta data, e o look
+  // volta para o topo (antes ele ficava onde estava e parecia nao ter salvo).
+  salvoEm  DateTime @default(now())
 
   @@index([usuarioId])
 }

@@ -69,6 +69,8 @@ const NOME_DA_FAMILIA: Record<FamiliaCor, string> = {
   PRETO: 'preto',
   CINZA: 'cinza',
   BRANCO: 'branco',
+  DOURADO: 'dourado',
+  PRATEADO: 'prateado',
 };
 
 // Diferença de claridade (L*) que já dá contraste entre as duas peças.

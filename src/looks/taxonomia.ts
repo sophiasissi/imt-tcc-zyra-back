@@ -1,4 +1,13 @@
-import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } from '@prisma/client';
+import {
+  Aquecimento,
+  Cano,
+  Categoria,
+  Estampa,
+  Estilo,
+  Manga,
+  Material,
+  Ocasiao,
+} from '@prisma/client';
 
 // Os valores de peça vêm dos enums do Prisma, que espelham
 // src/clothing_analysis/taxonomy.py da visão.
@@ -9,13 +18,15 @@ export const OCASIOES = Object.values(Ocasiao);
 export const AQUECIMENTOS = Object.values(Aquecimento);
 export const MATERIAIS = Object.values(Material);
 export const MANGAS = Object.values(Manga);
+export const CANOS = Object.values(Cano);
 
-export { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao };
+export { Aquecimento, Cano, Categoria, Estampa, Estilo, Manga, Material, Ocasiao };
 
 // Não é guardado na peça: o motor deduz a formalidade pelo estilo.
 export const FORMALIDADES = ['BAIXA', 'MEDIA', 'ALTA'] as const;
 
 // Famílias do ColorADD, as mesmas que a visão devolve em colorAddSymbol.
+// Dourado e prateado são os metalizados (sem claro e escuro).
 export const FAMILIAS_COR = [
   'VERMELHO',
   'LARANJA',
@@ -27,6 +38,8 @@ export const FAMILIAS_COR = [
   'PRETO',
   'CINZA',
   'BRANCO',
+  'DOURADO',
+  'PRATEADO',
 ] as const;
 
 export const TONS = ['CLARO', 'ESCURO'] as const;
@@ -51,15 +64,21 @@ export const PAPEL_DA_CATEGORIA: Record<Categoria, Papel> = {
   // O body é fechado entre as pernas, mas se veste como blusa: vai com calça,
   // short ou saia.
   BODY: 'SUPERIOR',
+  // O corset se usa sozinho; por cima da camisa social, só o colete (28/10/2026).
+  CORSET: 'SUPERIOR',
   MOLETOM: 'SUPERIOR',
+  SUETER: 'SUPERIOR',
   JAQUETA: 'SOBREPOSICAO',
   BLAZER: 'SOBREPOSICAO',
+  // O colete vai por cima da blusa, e não conta como manga: não cobre o braço.
+  COLETE: 'SOBREPOSICAO',
   CALCA: 'INFERIOR',
   SHORT: 'INFERIOR',
   SAIA: 'INFERIOR',
   VESTIDO: 'PECA_UNICA',
   TENIS: 'CALCADO',
   SAPATO: 'CALCADO',
+  BOTA: 'CALCADO',
   SANDALIA: 'CALCADO',
   CHINELO: 'CALCADO',
 };
@@ -76,7 +95,7 @@ export const ORDEM_DOS_PAPEIS: Papel[] = [
 export const NIVEL_DE_AQUECIMENTO = { LEVE: 0, MEDIO: 1, QUENTE: 2 } as const;
 
 // Agasalhos que vão por cima da camiseta quando aparecem junto com ela.
-const AGASALHOS_DE_CIMA: Categoria[] = ['MOLETOM', 'BLUSA'];
+const AGASALHOS_DE_CIMA: Categoria[] = ['MOLETOM', 'SUETER', 'BLUSA'];
 
 /**
  * Papel de cada peça num look já montado. O papel não é guardado (o app manda
@@ -88,6 +107,14 @@ export function papeisNoLook(
   pecas: { id: string; categoria: Categoria; aquecimento: Aquecimento | null }[],
 ): Map<string, Papel> {
   const papeis = new Map(pecas.map((p) => [p.id, PAPEL_DA_CATEGORIA[p.categoria]]));
+
+  // Colete sem outra peça de cima (nem vestido) é usado sozinho, como blusa.
+  const temCimaOuVestido = pecas.some((p) =>
+    ['SUPERIOR', 'PECA_UNICA'].includes(PAPEL_DA_CATEGORIA[p.categoria]),
+  );
+  const colete = pecas.find((p) => p.categoria === 'COLETE');
+  if (colete && !temCimaOuVestido) papeis.set(colete.id, 'SUPERIOR');
+
   const superiores = pecas.filter((p) => papeis.get(p.id) === 'SUPERIOR');
   if (superiores.length < 2) return papeis;
 

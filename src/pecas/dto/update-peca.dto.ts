@@ -1,7 +1,17 @@
-import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } from '@prisma/client';
+import {
+  Aquecimento,
+  Cano,
+  Categoria,
+  Estampa,
+  Estilo,
+  Manga,
+  Material,
+  Ocasiao,
+} from '@prisma/client';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsHexColor,
   IsOptional,
@@ -26,6 +36,26 @@ export class UpdatePecaDto {
   @IsOptional()
   @IsEnum(Manga)
   manga?: Manga | null;
+
+  @IsOptional()
+  @IsEnum(Cano)
+  cano?: Cano | null;
+
+  @IsOptional()
+  @IsBoolean()
+  salto?: boolean | null;
+
+  @IsOptional()
+  @IsBoolean()
+  alfaiataria?: boolean | null;
+
+  @IsOptional()
+  @IsBoolean()
+  colarinho?: boolean | null;
+
+  @IsOptional()
+  @IsBoolean()
+  casacoPesado?: boolean | null;
 
   @IsOptional()
   @IsEnum(Estilo)

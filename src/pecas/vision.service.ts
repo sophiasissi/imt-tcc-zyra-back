@@ -5,7 +5,16 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } from '@prisma/client';
+import {
+  Aquecimento,
+  Cano,
+  Categoria,
+  Estampa,
+  Estilo,
+  Manga,
+  Material,
+  Ocasiao,
+} from '@prisma/client';
 
 /**
  * Resposta do /analyze-clothing. Os codigos vem de taxonomy.py e sao os mesmos
@@ -14,6 +23,20 @@ import { Aquecimento, Categoria, Estampa, Estilo, Manga, Material, Ocasiao } fro
 export type AnaliseRoupa = {
   category: Categoria | null;
   sleeve: Manga | null;
+  /** Decote, costas abertas, ombro de fora ou transparência. Ausente em visões antigas. */
+  revealing?: boolean;
+  /** Saia ou vestido acima do meio da coxa. Ausente em visões antigas. */
+  mini?: boolean;
+  /** Calçado com salto (sapato, sandália ou bota). Ausente em visões antigas. */
+  heel?: boolean;
+  /** Altura do cano, só na bota. Ausente em visões antigas. */
+  bootShaft?: Cano | null;
+  /** Corte de alfaiataria, de qualquer fibra. Ausente em visões antigas. */
+  tailored?: boolean;
+  /** Gola de camisa (camisa, polo, chemise). Ausente em visões antigas. */
+  collar?: boolean;
+  /** Casaco pesado (puffer, parka, sobretudo). Ausente em visões antigas. */
+  heavyCoat?: boolean;
   style: Estilo | null;
   pattern: Estampa | null;
   warmth: Aquecimento | null;
@@ -76,7 +99,7 @@ export class VisionService {
     // taxonomia, como bone e chapeu.
     if (!analise.category) {
       throw new UnprocessableEntityException(
-        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, blusas, croppeds, tops, bodies, moletons, jaquetas, blazers, calças, shorts, saias, vestidos, tênis e sapatos.',
+        'Não reconhecemos o tipo desta peça. Dá para cadastrar camisetas, camisas, blusas, croppeds, tops, bodies, moletons, jaquetas, blazers, coletes, calças, shorts, saias, vestidos, tênis, sapatos, botas, sandálias e chinelos.',
       );
     }
 
