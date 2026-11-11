@@ -78,6 +78,9 @@ const REFERENCIA: Record<FamiliaCor, string> = {
   PRETO: '#1A1A1A',
   CINZA: '#808080',
   BRANCO: '#F2F2F2',
+  // Barras oficiais do ColorADD, as mesmas de coloradd.py na visão.
+  DOURADO: '#B08842',
+  PRATEADO: '#7B7A76',
 };
 
 /**

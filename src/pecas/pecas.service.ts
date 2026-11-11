@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Peca } from '@prisma/client';
+import { Categoria, Peca } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +9,12 @@ import { chaveDaMiniatura, fotosDaPeca, gerarMiniatura } from './fotos-da-peca';
 import { CreatePecaDto } from './dto/create-peca.dto';
 import { UpdatePecaDto } from './dto/update-peca.dto';
 import { CorDaPeca, VisionService } from './vision.service';
+
+// Só os calçados que podem ter salto guardam se têm.
+const CALCADOS_COM_SALTO: Categoria[] = ['SAPATO', 'SANDALIA', 'BOTA'];
+
+// Só saia e vestido guardam se são curtos (acima do meio da coxa).
+const CATEGORIAS_COM_COMPRIMENTO: Categoria[] = ['SAIA', 'VESTIDO'];
 
 // Quantos looks salvos usam a peca: o app avisa antes de apagar.
 const CONTAR_LOOKS = { _count: { select: { looks: true } } } as const;
@@ -69,6 +75,17 @@ export class PecasService {
           imagemMiniS3Key,
           categoria: analise.category,
           manga: analise.sleeve,
+          cano: analise.category === 'BOTA' ? (analise.bootShaft ?? null) : null,
+          salto: CALCADOS_COM_SALTO.includes(analise.category) ? (analise.heel ?? null) : null,
+          decotada: analise.revealing ?? null,
+          curta: CATEGORIAS_COM_COMPRIMENTO.includes(analise.category)
+            ? (analise.mini ?? null)
+            : null,
+          alfaiataria: analise.tailored ?? null,
+          colarinho: analise.collar ?? null,
+          casacoPesado: ['JAQUETA', 'BLAZER'].includes(analise.category)
+            ? (analise.heavyCoat ?? null)
+            : null,
           estilo: analise.style,
           estampa: analise.pattern,
           ocasioes: analise.occasions,

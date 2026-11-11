@@ -25,6 +25,10 @@ function peca(
     aquecimento: 'MEDIO',
     material: null,
     manga: null,
+    decotada: null,
+    cano: null,
+    salto: null,
+    curta: null,
     ...extras,
   };
 }

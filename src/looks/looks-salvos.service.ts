@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Peca } from '@prisma/client';
 
 import { FotosDaPeca, fotosDaPeca } from '../pecas/fotos-da-peca';
@@ -16,14 +16,19 @@ export type LookSalvo = {
   nome: string | null;
   ocasiao: Peca['ocasioes'][number] | null;
   criadoEm: Date;
+  salvoEm: Date;
   pecas: PecaDoLookSalvo[];
 };
+
+/** Resposta do POST /looks: diz se as mesmas peças já estavam salvas. */
+export type LookSalvoAgora = LookSalvo & { jaEstavaSalvo: boolean };
 
 type LookDoBanco = {
   id: string;
   nome: string | null;
   ocasiao: Peca['ocasioes'][number] | null;
   criadoEm: Date;
+  salvoEm: Date;
   pecas: { ordem: number; peca: Peca }[];
 };
 
@@ -31,6 +36,8 @@ const INCLUIR_PECAS = { pecas: { include: { peca: true } } } as const;
 
 @Injectable()
 export class LooksSalvosService {
+  private readonly logger = new Logger(LooksSalvosService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -39,9 +46,10 @@ export class LooksSalvosService {
 
   /**
    * Salva um look do chat. Se o usuário já salvou exatamente as mesmas peças,
-   * devolve o look existente: um toque duplo no botão não cria uma cópia.
+   * não cria cópia (um toque duplo no botão daria duas): o look existente
+   * volta para o topo da galeria, e a resposta diz que ele já estava salvo.
    */
-  async salvar(cognitoSub: string, dto: SalvarLookDto): Promise<LookSalvo> {
+  async salvar(cognitoSub: string, dto: SalvarLookDto): Promise<LookSalvoAgora> {
     const usuario = await this.buscarUsuario(cognitoSub);
 
     const pecas = await this.prisma.peca.findMany({
@@ -64,7 +72,15 @@ export class LooksSalvosService {
     const existente = candidatos.find((look) => mesmasPecas(look.pecas.map((p) => p.pecaId)));
 
     if (existente) {
-      return this.toResponse(existente);
+      // Sem isto, o look ficava na posição antiga: no evento de 24/10/2026,
+      // com vários "Dia de trabalho" parecidos, parecia que não tinha salvo.
+      const atualizado = await this.prisma.look.update({
+        where: { id: existente.id },
+        data: { salvoEm: new Date() },
+        include: INCLUIR_PECAS,
+      });
+      this.logger.log(`Look ${existente.id} salvo de novo: as mesmas peças já estavam salvas.`);
+      return { ...(await this.toResponse(atualizado)), jaEstavaSalvo: true };
     }
 
     const papeis = papeisNoLook(pecas);
@@ -87,7 +103,8 @@ export class LooksSalvosService {
       include: INCLUIR_PECAS,
     });
 
-    return this.toResponse(look);
+    this.logger.log(`Look ${look.id} salvo (${ordenadas.length} peças).`);
+    return { ...(await this.toResponse(look)), jaEstavaSalvo: false };
   }
 
   /** Looks do usuário, do mais recente para o mais antigo. */
@@ -96,7 +113,7 @@ export class LooksSalvosService {
 
     const looks = await this.prisma.look.findMany({
       where: { usuarioId: usuario.id },
-      orderBy: { criadoEm: 'desc' },
+      orderBy: { salvoEm: 'desc' },
       include: INCLUIR_PECAS,
     });
 
@@ -151,6 +168,7 @@ export class LooksSalvosService {
       nome: look.nome,
       ocasiao: look.ocasiao,
       criadoEm: look.criadoEm,
+      salvoEm: look.salvoEm,
       pecas,
     };
   }

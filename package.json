@@ -16,6 +16,7 @@
     "prepare": "husky",
     "avaliar:intencoes": "ts-node scripts/avaliar-intencoes.ts",
     "gerar:miniaturas": "ts-node scripts/gerar-miniaturas.ts",
+    "reanalisar:pecas": "ts-node scripts/reanalisar-pecas.ts",
     "limpar:fotos-orfas": "ts-node scripts/limpar-fotos-orfas.ts"
   },
   "lint-staged": {
