@@ -5,6 +5,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -25,6 +26,7 @@ import {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly cognitoClient: CognitoIdentityProviderClient;
   private readonly clientId: string;
   private readonly userPoolId: string;
@@ -370,10 +372,18 @@ export class AuthService {
       return {
         accessToken: response.AuthenticationResult?.AccessToken,
         idToken: response.AuthenticationResult?.IdToken,
+        // So' vem com a rotacao de refresh token ligada no Cognito; o app
+        // guarda o novo quando ele existe.
+        refreshToken: response.AuthenticationResult?.RefreshToken,
         expiresIn: response.AuthenticationResult?.ExpiresIn,
         tokenType: response.AuthenticationResult?.TokenType,
       };
-    } catch {
+    } catch (error) {
+      // O Cognito diz por que recusou ("Refresh Token has expired", "has been
+      // revoked"...). Sem este log, toda recusa vira "sessao expirou".
+      const motivo = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      this.logger.warn(`Renovação de sessão recusada (${motivo})`);
+
       throw new UnauthorizedException('Sua sessão expirou. Entre novamente para continuar.');
     }
   }
