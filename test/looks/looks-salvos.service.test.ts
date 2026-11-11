@@ -15,6 +15,7 @@ type LookFake = {
   nome: string | null;
   ocasiao: string | null;
   criadoEm: Date;
+  salvoEm: Date;
   pecas: { pecaId: string; ordem: number }[];
 };
 
@@ -31,6 +32,14 @@ function peca(id: string, usuarioId: string, categoria: Peca['categoria']): Peca
     aquecimento: 'MEDIO',
     material: null,
     manga: null,
+    decotada: null,
+    cano: null,
+    salto: null,
+    alfaiataria: null,
+    colarinho: null,
+    casacoPesado: null,
+    sugeridaEm: null,
+    curta: null,
     corNome: 'Preto',
     hex: '#1A1A1A',
     colorAddSymbol: 'COLORADD_PRETO',
@@ -78,12 +87,12 @@ function criarBanco() {
       findMany: async ({ where }: { where: { usuarioId: string } }) =>
         looks
           .filter((l) => l.usuarioId === where.usuarioId)
-          .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())
+          .sort((a, b) => b.salvoEm.getTime() - a.salvoEm.getTime())
           .map(comPecas),
       create: async ({
         data,
       }: {
-        data: Omit<LookFake, 'id' | 'criadoEm' | 'pecas'> & {
+        data: Omit<LookFake, 'id' | 'criadoEm' | 'salvoEm' | 'pecas'> & {
           pecas: { create: LookFake['pecas'] };
         };
       }) => {
@@ -93,9 +102,16 @@ function criarBanco() {
           nome: data.nome,
           ocasiao: data.ocasiao,
           criadoEm: new Date(Date.now() + proximo),
+          salvoEm: new Date(Date.now() + proximo),
           pecas: data.pecas.create,
         };
         looks.push(look);
+        return comPecas(look);
+      },
+      update: async ({ where, data }: { where: { id: string }; data: { salvoEm: Date } }) => {
+        const look = looks.find((l) => l.id === where.id)!;
+        // Um tique depois do último look criado, como o relógio real faria.
+        look.salvoEm = new Date(Math.max(data.salvoEm.getTime(), Date.now() + ++proximo));
         return comPecas(look);
       },
       deleteMany: async ({ where }: { where: { id: string; usuarioId: string } }) => {
@@ -202,6 +218,19 @@ describe('LooksSalvosService', () => {
     const segundo = await banco.servico.salvar('sub-1', { pecaIds: [CAMISA, TENIS, CALCA] });
     assert.equal(segundo.id, primeiro.id);
     assert.equal(banco.looks.length, 1);
+    assert.equal(primeiro.jaEstavaSalvo, false);
+    assert.equal(segundo.jaEstavaSalvo, true);
+  });
+
+  it('salvar de novo um look antigo leva ele para o topo da galeria (bug do evento de 24/10)', async () => {
+    await banco.servico.salvar('sub-1', { pecaIds: [CAMISA, CALCA], nome: 'antigo' });
+    await banco.servico.salvar('sub-1', { pecaIds: [CAMISA, CALCA, TENIS], nome: 'novo' });
+    await banco.servico.salvar('sub-1', { pecaIds: [CALCA, CAMISA] });
+    const looks = await banco.servico.listar('sub-1');
+    assert.deepEqual(
+      looks.map((l) => l.nome),
+      ['antigo', 'novo'],
+    );
   });
 
   it('recusa peça de outra pessoa', async () => {
