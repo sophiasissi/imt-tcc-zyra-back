@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { Intencao } from '../../src/looks/interpretar-pedido';
 import { montarLook, PecaMotor, ResultadoMotor } from '../../src/looks/motor';
-import { compatibilidade } from '../../src/looks/ocasioes';
+import { compatibilidade, notaDeOcasiao } from '../../src/looks/ocasioes';
 
 let proximoId = 0;
 
@@ -26,6 +26,10 @@ function peca(
     aquecimento: 'MEDIO',
     material: null,
     manga: null,
+    decotada: null,
+    cano: null,
+    salto: null,
+    curta: null,
     ...extras,
   };
 }
@@ -359,5 +363,65 @@ describe('sandália e chinelo', () => {
   it('sandália pode ir à festa, mas não à academia', () => {
     assert.notEqual(compatibilidade(sandalia, 'FESTA'), 'PROIBIDA');
     assert.equal(compatibilidade(sandalia, 'ACADEMIA'), 'PROIBIDA');
+  });
+});
+
+describe('corset', () => {
+  const corset = (material: PecaMotor['material'], ocasioes: PecaMotor['ocasioes']) =>
+    peca('CORSET', 'Preto', 'COLORADD_PRETO', '#1A1A1A', {
+      material,
+      ocasioes,
+      manga: 'SEM_MANGA',
+      decotada: true,
+    });
+  const deCouro = corset('COURO', ['DIA_A_DIA', 'FESTA']);
+  const deCetim = corset('CETIM', ['FESTA']);
+  const deJeans = corset('JEANS', ['DIA_A_DIA']);
+
+  it('não vai para trabalho, academia, praia ou casa', () => {
+    for (const ocasiao of ['TRABALHO', 'ACADEMIA', 'PRAIA', 'CASA'] as const) {
+      for (const c of [deCouro, deCetim, deJeans]) {
+        assert.equal(compatibilidade(c, ocasiao), 'PROIBIDA', `${c.material} ${ocasiao}`);
+      }
+    }
+  });
+
+  it('na festa formal, só o de tecido nobre', () => {
+    const formal = { formalidade: 'ALTA' as const };
+    assert.equal(compatibilidade(deCetim, 'FESTA', formal), 'ADEQUADA');
+    assert.equal(compatibilidade(deCouro, 'FESTA', formal), 'PROIBIDA');
+    assert.equal(compatibilidade(deJeans, 'FESTA', formal), 'PROIBIDA');
+    assert.equal(compatibilidade(deCouro, 'FESTA'), 'ADEQUADA');
+  });
+
+  it('o de jeans é o do dia a dia; o de couro, o da festa', () => {
+    assert.ok(notaDeOcasiao(deJeans, 'DIA_A_DIA') > notaDeOcasiao(deCouro, 'DIA_A_DIA'));
+    assert.ok(notaDeOcasiao(deCouro, 'FESTA') > notaDeOcasiao(deJeans, 'FESTA'));
+  });
+
+  it('entra no look como peça de cima, sozinho', () => {
+    const pecas = [
+      deCouro,
+      ...['Branco', 'Cinza Claro', 'Preto', 'Castanho'].map((cor) =>
+        peca('CAMISETA', cor, `COLORADD_${cor.toUpperCase().replace(' ', '_')}`, '#888888', {
+          ocasioes: ['DIA_A_DIA'],
+        }),
+      ),
+      ...[1, 2, 3, 4, 5].map(() =>
+        peca('CALCA', 'Preto', 'COLORADD_PRETO', '#1A1A1A', {
+          material: 'ALFAIATARIA',
+          ocasioes: ['FESTA', 'TRABALHO'],
+        }),
+      ),
+      peca('SAPATO', 'Preto', 'COLORADD_PRETO', '#1A1A1A', { ocasioes: ['FESTA'] }),
+    ];
+    const r: ResultadoMotor = montarLook(pecas, intencao({ ocasiao: 'FESTA' }));
+    assert.equal(r.status, 'LOOK');
+    const look = r.status === 'LOOK' ? r.pecas : [];
+    const noLook = look.find((p) => p.id === deCouro.id);
+    assert.ok(noLook, 'o corset de couro deveria sair na festa');
+    assert.equal(noLook.papel, 'SUPERIOR');
+    const camisetas = new Set(pecas.filter((p) => p.categoria === 'CAMISETA').map((p) => p.id));
+    assert.ok(!look.some((p) => camisetas.has(p.id)), 'nada de camiseta junto');
   });
 });

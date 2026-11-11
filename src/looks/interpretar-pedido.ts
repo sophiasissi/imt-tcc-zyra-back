@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 
+import type { Periodo } from './ocasioes';
+
 import {
   AQUECIMENTOS,
   Aquecimento,
@@ -47,6 +49,19 @@ export type Intencao = {
   estilo: Estilo | null;
   aquecimento: Aquecimento | null;
   paletaNeutra: boolean;
+  /**
+   * Look de uma cor só ("look azul", "look todo preto", "meu conjunto"): duas
+   * peças do mesmo tom e o resto neutro. Opcionais para os testes e para
+   * intenções montadas no código; a IA sempre devolve os dois.
+   */
+  umaCor?: boolean;
+  /** A cor desse look, se o usuário disse qual. */
+  corDoLook?: Cor | null;
+  /**
+   * Festa de dia ou à noite. Não vem da IA: o código lê da conversa e, se
+   * faltar numa festa, pergunta antes de montar o look.
+   */
+  periodo?: Periodo | null;
   incluir: PecaDesejada[];
   evitarCategorias: Categoria[];
   evitarCores: Cor[];
@@ -94,7 +109,7 @@ Campos:
   - DIA_A_DIA: rotina, faculdade, passeio, churrasco
   - TRABALHO: escritório, reunião, entrevista
   - FESTA: aniversário, balada, casamento
-  - ACADEMIA: treino, corrida
+  - ACADEMIA: treino, corrida, caminhada, trilha, bike: atividade física em que se sua
   - PRAIA: praia, piscina
   - CASA: ficar na própria casa, dormir
 - formalidade: ${FORMALIDADES.join(', ')}. Só preencha se o pedido indicar o nível
@@ -104,13 +119,19 @@ Campos:
 - aquecimento: só se o usuário falar do clima. LEVE para calor, MEDIO para frio leve
   ou clima ameno, QUENTE para frio.
 - paletaNeutra: true se o usuário pedir só neutros, pouca cor ou cores "seguras".
+- umaCor: true se o usuário pedir o look inteiro numa cor ou tom sobre tom ("look
+  azul", "look todo preto", "look de uma cor só", "usar meu conjunto").
+  corDoLook: a cor desse look, se ele disser qual ("look azul" = AZUL); senão null.
+  A cor do look não entra em incluir. Querer usar uma peça de uma cor ("meu
+  moletom azul", "o vestido lilás") NÃO é umaCor: vai em incluir.
 - incluir: peças que o usuário quer usar. Preencha só a categoria, a cor e o material
   que ele disse. Bolsa, mochila, boné e outros acessórios não fazem parte do closet:
   não entram em incluir, vão para naoMapeado.
 - evitarCategorias e evitarCores: só o que o usuário disse que não quer.
 - categorias: ${CATEGORIAS.join(', ')}. materiais: ${MATERIAIS.join(', ')}.
   Blusa ou blusinha = BLUSA; regata = CAMISETA; "calça de moletom" = CALCA com
-  material MOLETOM, e "um moletom" = categoria MOLETOM; pijama de pelinho = SOFT.
+  material MOLETOM, e "um moletom" = categoria MOLETOM; suéter ou pulôver = SUETER;
+  pijama de pelinho = SOFT.
 - cores: famílias do ColorADD (${FAMILIAS_COR.join(', ')}), com tom ${TONS.join(' ou ')}
   opcional. Rosa = VERMELHO CLARO, marrom = CASTANHO, marinho = AZUL ESCURO,
   vinho = VERMELHO ESCURO.
@@ -147,6 +168,8 @@ const INTENCAO_SCHEMA = {
     'estilo',
     'aquecimento',
     'paletaNeutra',
+    'umaCor',
+    'corDoLook',
     'incluir',
     'evitarCategorias',
     'evitarCores',
@@ -161,6 +184,8 @@ const INTENCAO_SCHEMA = {
     estilo: nulo(ESTILOS),
     aquecimento: nulo(AQUECIMENTOS),
     paletaNeutra: { type: 'boolean' },
+    umaCor: { type: 'boolean' },
+    corDoLook: { anyOf: [COR_SCHEMA, { type: 'null' }] },
     incluir: {
       type: 'array',
       items: {
@@ -182,10 +207,10 @@ const INTENCAO_SCHEMA = {
   },
 };
 
-const NEUTRAS_SEM_TOM: FamiliaCor[] = ['PRETO', 'BRANCO'];
+const FAMILIAS_SEM_TOM: FamiliaCor[] = ['PRETO', 'BRANCO', 'DOURADO', 'PRATEADO'];
 
-function semTomSeNeutra(cor: Cor | null): Cor | null {
-  if (!cor || !NEUTRAS_SEM_TOM.includes(cor.familia)) return cor;
+function semTomSeNaoTem(cor: Cor | null): Cor | null {
+  if (!cor || !FAMILIAS_SEM_TOM.includes(cor.familia)) return cor;
   return { ...cor, tom: null };
 }
 
@@ -200,6 +225,7 @@ export function ajustarIntencao(intencao: Intencao): Intencao {
     intencao.estilo !== null ||
     intencao.formalidade !== null ||
     intencao.paletaNeutra ||
+    Boolean(intencao.umaCor) ||
     intencao.incluir.length > 0 ||
     intencao.evitarCategorias.length > 0 ||
     intencao.evitarCores.length > 0;
@@ -209,14 +235,45 @@ export function ajustarIntencao(intencao: Intencao): Intencao {
   // camisa social?" também tem filtro).
   const tipo = intencao.tipo === 'ESCLARECER' && temFiltro ? 'LOOK' : intencao.tipo;
 
+  // "Look todo azul claro": a IA às vezes põe a cor também em incluir, como
+  // "uma peça azul claro qualquer". A cor do look já diz isso.
+  const corDoLook = semTomSeNaoTem(intencao.corDoLook ?? null);
+  const repeteACorDoLook = (peca: PecaDesejada) =>
+    corDoLook !== null &&
+    peca.categoria === null &&
+    peca.material === null &&
+    peca.cor?.familia === corDoLook.familia;
+
+  // "Quero usar meu moletom azul": a IA às vezes lê como look azul. Se a cor
+  // do look é a de uma peça pedida pelo nome, o pedido é usar a peça.
+  const ehCorDeUmaPeca =
+    corDoLook !== null &&
+    intencao.incluir.some(
+      (peca) => peca.categoria !== null && peca.cor?.familia === corDoLook.familia,
+    );
+  const umaCor = !ehCorDeUmaPeca && (Boolean(intencao.umaCor) || corDoLook !== null);
+
   return {
     ...intencao,
     tipo,
     pergunta: tipo === 'ESCLARECER' ? intencao.pergunta : null,
     trocar: intencao.trocar ?? [],
+    umaCor,
+    corDoLook: ehCorDeUmaPeca ? null : corDoLook,
     // "Preto claro" e "branco escuro" não existem no ColorADD.
-    incluir: intencao.incluir.map((peca) => ({ ...peca, cor: semTomSeNeutra(peca.cor) })),
-    evitarCores: intencao.evitarCores.map((cor) => semTomSeNeutra(cor)!),
+    incluir: intencao.incluir
+      .filter((peca) => !repeteACorDoLook(peca))
+      .map((peca) => ({
+        ...peca,
+        // "Meu conjunto de moletom": a IA lê "um moletom" (a blusa), mas o
+        // conjunto é o tecido. Qualquer peça de moletom serve.
+        categoria:
+          umaCor && peca.categoria === 'MOLETOM' && peca.material === 'MOLETOM'
+            ? null
+            : peca.categoria,
+        cor: semTomSeNaoTem(peca.cor),
+      })),
+    evitarCores: intencao.evitarCores.map((cor) => semTomSeNaoTem(cor)!),
   };
 }
 

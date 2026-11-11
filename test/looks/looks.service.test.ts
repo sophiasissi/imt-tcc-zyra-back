@@ -5,11 +5,14 @@ import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Peca } from '@prisma/client';
 
-import { ClimaService, Previsao } from '../../src/looks/clima';
+import { ClimaService, Horario, Previsao } from '../../src/looks/clima';
 import {
   PERGUNTA_CLIMA,
   PERGUNTA_OCASIAO,
+  PERGUNTA_PERIODO_DO_DIA,
+  PERGUNTA_QUANDO,
   PERGUNTA_SALVAR,
+  RESPOSTA_JA_SALVO,
   RESPOSTA_SALVO,
 } from '../../src/looks/conversa';
 import { Intencao } from '../../src/looks/interpretar-pedido';
@@ -38,6 +41,14 @@ function peca(
     aquecimento: 'MEDIO',
     material: null,
     manga: null,
+    decotada: null,
+    cano: null,
+    salto: null,
+    alfaiataria: null,
+    colarinho: null,
+    casacoPesado: null,
+    sugeridaEm: null,
+    curta: null,
     corNome,
     hex,
     colorAddSymbol,
@@ -89,6 +100,8 @@ function criarServico(
   const prisma = {
     usuario: { findUnique: async () => (opcoes.semUsuario ? null : { id: 'usuario-1' }) },
     peca: { findMany: async () => pecas },
+    // Registro do uso das peças (UPDATE de sugeridaEm): aqui só conta as chamadas.
+    $executeRaw: async () => 1,
   } as unknown as PrismaService;
   const s3 = {
     getReadUrl: async (key: string) => `https://s3.exemplo/${key}`,
@@ -98,9 +111,11 @@ function criarServico(
   } as unknown as ConfigService;
 
   const consultasClima: number[] = [];
+  const horariosConsultados: (Horario | null | undefined)[] = [];
   const clima = {
-    previsao: async (_local: unknown, dias: number) => {
+    previsao: async (_local: unknown, dias: number, horario?: Horario | null) => {
       consultasClima.push(dias);
+      horariosConsultados.push(horario);
       return opcoes.previsao ?? null;
     },
   } as unknown as ClimaService;
@@ -108,20 +123,26 @@ function criarServico(
   const dadosSalvos: { nome?: string; ocasiao?: string }[] = [];
   const looksSalvos = {
     salvar: async (_sub: string, dto: { pecaIds: string[]; nome?: string; ocasiao?: string }) => {
+      const mesmas = (ids: string[]) =>
+        ids.length === dto.pecaIds.length && ids.every((id) => dto.pecaIds.includes(id));
+      const jaEstavaSalvo = salvos.some(mesmas);
       salvos.push(dto.pecaIds);
       dadosSalvos.push({ nome: dto.nome, ocasiao: dto.ocasiao });
-      return { id: 'look-salvo-1' };
+      return { id: 'look-salvo-1', jaEstavaSalvo };
     },
   } as unknown as LooksSalvosService;
 
   class LooksServiceDeTeste extends LooksService {
     chamadasIA = 0;
+    mensagensParaIA: string[] = [];
     consultasClima = consultasClima;
+    horariosConsultados = horariosConsultados;
     salvos = salvos;
     dadosSalvos = dadosSalvos;
     protected async interpretar(mensagem: string, historico: never[]) {
       if (!resposta) return super.interpretar(mensagem, historico);
       this.chamadasIA++;
+      this.mensagensParaIA.push(mensagem);
       return resposta;
     }
   }
@@ -185,6 +206,26 @@ describe('LooksService.sugerir', () => {
   const zyra = (texto: string) => ({ autor: 'zyra' as const, texto });
   const lookNaTela = armarioCompleto.slice(0, 2).map((p) => p.id);
 
+  it('salvar de novo o mesmo look avisa que ele já estava salvo', async () => {
+    const servico = criarServico(armarioCompleto, intencao());
+    const pedido = {
+      mensagem: 'sim',
+      historico: [
+        zyra(`Camiseta Branca + Calça Azul
+
+${PERGUNTA_SALVAR}`),
+      ],
+      pecasAnteriores: lookNaTela,
+    };
+    const primeira = await servico.sugerir('sub', pedido);
+    assert.equal(primeira.mensagem, RESPOSTA_SALVO);
+    assert.equal(primeira.tipo === 'SALVO' && primeira.jaEstavaSalvo, false);
+    // O app mostra o pop-up "já está salvo" por este campo.
+    const segunda = await servico.sugerir('sub', pedido);
+    assert.equal(segunda.mensagem, RESPOSTA_JA_SALVO);
+    assert.equal(segunda.tipo === 'SALVO' && segunda.jaEstavaSalvo, true);
+  });
+
   it('"sim" depois de "Quer salvar esse look?" salva o look da tela sem chamar a IA', async () => {
     const servico = criarServico(armarioCompleto, intencao());
     const r = await servico.sugerir('sub', {
@@ -192,7 +233,12 @@ describe('LooksService.sugerir', () => {
       historico: [zyra(`Camiseta Branca + Calça Azul\n\n${PERGUNTA_SALVAR}`)],
       pecasAnteriores: lookNaTela,
     });
-    assert.deepEqual(r, { tipo: 'SALVO', mensagem: RESPOSTA_SALVO, lookId: 'look-salvo-1' });
+    assert.deepEqual(r, {
+      tipo: 'SALVO',
+      mensagem: RESPOSTA_SALVO,
+      lookId: 'look-salvo-1',
+      jaEstavaSalvo: false,
+    });
     assert.deepEqual(servico.salvos, [lookNaTela]);
     assert.equal(servico.chamadasIA, 0);
   });
@@ -274,7 +320,10 @@ describe('LooksService.sugerir', () => {
     const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'TRABALHO' }), {
       previsao: { diasAPartirDeHoje: 1, minima: 10, maxima: 18, chanceDeChuva: 80 },
     });
-    const r = await servico.sugerir('sub', { mensagem: 'trabalho amanhã', localizacao: LOCAL });
+    const r = await servico.sugerir('sub', {
+      mensagem: 'trabalho amanhã de manhã',
+      localizacao: LOCAL,
+    });
     assert.deepEqual(servico.consultasClima, [1]);
     assert.equal(r.tipo, 'LOOK');
     if (r.tipo !== 'LOOK') return;
@@ -299,11 +348,11 @@ describe('LooksService.sugerir', () => {
     const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'TRABALHO' }), {
       previsao: { diasAPartirDeHoje: 0, minima: 16, maxima: 23, chanceDeChuva: 0 },
     });
-    const r1 = await servico.sugerir('sub', { mensagem: 'trabalho', localizacao: LOCAL });
+    const r1 = await servico.sugerir('sub', { mensagem: 'trabalho à tarde', localizacao: LOCAL });
     const anterior = r1.tipo === 'LOOK' ? `${r1.mensagem}\n\n${r1.clima}` : '';
     const r2 = await servico.sugerir('sub', {
       mensagem: 'outro',
-      historico: [zyra(anterior)],
+      historico: [{ autor: 'usuario', texto: 'trabalho à tarde' }, zyra(anterior)],
       localizacao: LOCAL,
     });
     assert.ok(r1.tipo === 'LOOK' && r1.clima);
@@ -366,5 +415,164 @@ describe('LooksService.sugerir', () => {
       pecasAnteriores: naTela,
     });
     assert.equal(r.tipo === 'LOOK' && r.pecas.length, 4);
+  });
+});
+
+// Pedidos da Sophia em 10/11/2026: perguntar se a festa é de dia ou à noite
+// antes de montar; atividade física pelo texto; aviso do ar-condicionado.
+describe('LooksService.sugerir: período, atividade física e lugar fechado', () => {
+  const zyra = (texto: string) => ({ autor: 'zyra' as const, texto });
+  const usuario = (texto: string) => ({ autor: 'usuario' as const, texto });
+
+  it('festa sem dizer quando: pergunta se é de dia ou à noite', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'FESTA' }));
+    const r = await servico.sugerir('sub', { mensagem: 'quero um look pra festa de sábado' });
+    assert.deepEqual(r, { tipo: 'PERGUNTA', mensagem: PERGUNTA_PERIODO_DO_DIA });
+    // Sem o dia, pergunta o dia e o período.
+    const semDia = await servico.sugerir('sub', { mensagem: 'quero um look pra festa' });
+    assert.deepEqual(semDia, { tipo: 'PERGUNTA', mensagem: PERGUNTA_QUANDO });
+  });
+
+  it('com o período na mensagem (ou na balada), monta direto', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'FESTA' }));
+    for (const mensagem of ['festa à noite', 'casamento de dia', 'look pra balada']) {
+      const r = await servico.sugerir('sub', { mensagem });
+      assert.equal(r.tipo, 'LOOK', mensagem);
+    }
+  });
+
+  it('a resposta "à noite" vai para a IA junto com o pedido de antes', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'FESTA' }));
+    const r = await servico.sugerir('sub', {
+      mensagem: 'à noite',
+      historico: [usuario('look pra festa de sábado'), zyra(PERGUNTA_QUANDO)],
+    });
+    assert.equal(r.tipo, 'LOOK');
+    assert.deepEqual(servico.mensagensParaIA, ['look pra festa de sábado. à noite']);
+  });
+
+  it('com localização e sem horário, pergunta quando antes de montar', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'DIA_A_DIA' }), {
+      previsao: { diasAPartirDeHoje: 1, minima: 10, maxima: 18, chanceDeChuva: 0 },
+    });
+    const local = { latitude: -23.55, longitude: -46.63 };
+    const r = await servico.sugerir('sub', { mensagem: 'passeio amanhã', localizacao: local });
+    assert.deepEqual(r, { tipo: 'PERGUNTA', mensagem: PERGUNTA_PERIODO_DO_DIA });
+    assert.deepEqual(servico.consultasClima, [], 'só consulta a previsão depois da resposta');
+
+    const resposta = await servico.sugerir('sub', {
+      mensagem: 'de manhã',
+      historico: [usuario('passeio amanhã'), zyra(PERGUNTA_PERIODO_DO_DIA)],
+      localizacao: local,
+    });
+    assert.equal(resposta.tipo, 'LOOK');
+    assert.deepEqual(servico.consultasClima, [1], 'o dia vem do pedido de antes');
+    assert.deepEqual(servico.horariosConsultados[0], {
+      partes: ['MANHA'],
+      inicio: 6,
+      fim: 12,
+      nome: 'De manhã',
+    });
+  });
+
+  it('"trabalho amanhã": a ocasião do texto vale, sem a pergunta que a IA escreveu', async () => {
+    // A IA lia como um evento sem nome e perguntava "Qual o tipo de trabalho?".
+    const servico = criarServico(
+      armarioCompleto,
+      intencao({ tipo: 'ESCLARECER', ocasiao: null, pergunta: 'Qual o tipo de trabalho?' }),
+    );
+    const r = await servico.sugerir('sub', { mensagem: 'trabalho amanhã' });
+    assert.equal(r.tipo, 'LOOK');
+    if (r.tipo === 'LOOK') assert.equal(r.ocasiao, 'TRABALHO');
+    // "Tenho um evento amanhã" continua com a pergunta: não diz a ocasião.
+    const evento = criarServico(
+      armarioCompleto,
+      intencao({ tipo: 'ESCLARECER', ocasiao: null, pergunta: 'Que evento?' }),
+    );
+    const e = await evento.sugerir('sub', { mensagem: 'tenho um evento amanhã' });
+    assert.deepEqual(e, { tipo: 'PERGUNTA', mensagem: 'Que evento?' });
+  });
+
+  it('trabalho já diz o horário: o expediente, sem perguntar', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'TRABALHO' }), {
+      previsao: { diasAPartirDeHoje: 1, minima: 10, maxima: 18, chanceDeChuva: 0 },
+    });
+    const local = { latitude: -23.55, longitude: -46.63 };
+    const r = await servico.sugerir('sub', {
+      mensagem: 'look pra trabalhar amanhã',
+      localizacao: local,
+    });
+    assert.equal(r.tipo, 'LOOK');
+    assert.deepEqual(servico.horariosConsultados[0], {
+      partes: ['MANHA', 'TARDE'],
+      inicio: 7,
+      fim: 19,
+      nome: 'No horário de trabalho',
+    });
+    // O horário dito pela pessoa vale mais ("plantão à noite").
+    await servico.sugerir('sub', { mensagem: 'trabalho amanhã à noite', localizacao: local });
+    assert.equal(servico.horariosConsultados[1]?.nome, 'À noite');
+  });
+
+  it('não pergunta o horário para ficar em casa, com o clima dito ou com um look na tela', async () => {
+    const local = { latitude: -23.55, longitude: -46.63 };
+    const casa = criarServico(armarioCompleto, intencao({ ocasiao: 'CASA' }));
+    const r1 = await casa.sugerir('sub', { mensagem: 'ficar em casa', localizacao: local });
+    assert.notEqual(r1.tipo, 'PERGUNTA');
+    const comClima = criarServico(
+      armarioCompleto,
+      intencao({ ocasiao: 'DIA_A_DIA', aquecimento: 'LEVE' }),
+    );
+    const r2 = await comClima.sugerir('sub', { mensagem: 'passeio, tá calor', localizacao: local });
+    assert.notEqual(r2.tipo, 'PERGUNTA');
+    const comLook = criarServico(armarioCompleto, intencao({ ocasiao: 'DIA_A_DIA' }));
+    const r3 = await comLook.sugerir('sub', {
+      mensagem: 'quero outro',
+      localizacao: local,
+      pecasAnteriores: armarioCompleto.slice(0, 2).map((p) => p.id),
+    });
+    assert.notEqual(r3.tipo, 'PERGUNTA');
+  });
+
+  it('pergunta uma vez só: se a pessoa não respondeu o período, segue sem', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'FESTA' }));
+    const r = await servico.sugerir('sub', {
+      mensagem: 'tanto faz',
+      historico: [usuario('look pra festa'), zyra(PERGUNTA_QUANDO)],
+    });
+    assert.equal(r.tipo, 'LOOK');
+  });
+
+  it('correr no parque vira atividade física, mesmo se a IA disser dia a dia', async () => {
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'DIA_A_DIA' }));
+    const r = await servico.sugerir('sub', { mensagem: 'vou correr no parque' });
+    assert.ok(r.tipo === 'LOOK' || r.tipo === 'SEM_LOOK');
+    if (r.tipo === 'LOOK') assert.equal(r.ocasiao, 'ACADEMIA');
+    // O armário de teste não tem roupa de treino: a mensagem fala da academia.
+    if (r.tipo === 'SEM_LOOK') assert.match(r.mensagem, /academia/);
+  });
+
+  it('shopping num dia quente: avisa do ar-condicionado uma vez', async () => {
+    const calor: Previsao = { diasAPartirDeHoje: 0, minima: 22, maxima: 31, chanceDeChuva: 0 };
+    const servico = criarServico(armarioCompleto, intencao({ ocasiao: 'DIA_A_DIA' }), {
+      previsao: calor,
+    });
+    const local = { latitude: -23.55, longitude: -46.63 };
+    const r = await servico.sugerir('sub', {
+      mensagem: 'passear no shopping à tarde',
+      localizacao: local,
+    });
+    assert.equal(r.tipo, 'LOOK');
+    if (r.tipo !== 'LOOK') return;
+    assert.ok(r.avisos.some((a) => a.startsWith('No shopping, o ar-condicionado')));
+
+    const deNovo = await servico.sugerir('sub', {
+      mensagem: 'quero outro',
+      historico: [usuario('passear no shopping'), zyra(`Look...\n\n${r.avisos.join('\n')}`)],
+      localizacao: local,
+    });
+    if (deNovo.tipo === 'LOOK') {
+      assert.ok(!deNovo.avisos.some((a) => a.includes('ar-condicionado')));
+    }
   });
 });
